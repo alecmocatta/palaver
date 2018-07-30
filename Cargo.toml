@@ -1,0 +1,39 @@
+[package]
+name = "palaver"
+version = "0.1.0"
+license = "Apache-2.0"
+authors = ["Alec Mocatta <alec@mocatta.net>"]
+categories = ["os::unix-apis","os::windows-apis","os::macos-apis"]
+keywords = ["polyfill","pal","platform-abstraction-layer"]
+description = """
+Cross-platform polyfills.
+
+This library attempts to provide reliable pollyfills for functionality that isn't implemented on all platforms, for example `gettid`, `memfd_create`, `fexecve`, as well as providing non-atomic versions of functions like `accept4`, `socket`+`SOCK_CLOEXEC`, `pipe2`, an other miscellanea like `seal` to make a file descriptor read-only thus suitable for `fexecve`.
+"""
+repository = "https://github.com/alecmocatta/palaver"
+homepage = "https://github.com/alecmocatta/palaver"
+documentation = "https://docs.rs/palaver/0.1.0"
+readme = "README.md"
+
+[badges]
+#appveyor = { repository = "alecmocatta/palaver" }
+circle-ci = { repository = "alecmocatta/palaver" }
+#gitlab = { repository = "alecmocatta/palaver" }
+travis-ci = { repository = "alecmocatta/palaver" }
+
+maintenance = { status = "actively-developed" }
+
+[dependencies]
+proc_self = "0.1"
+valgrind_request = "1.1"
+void = "1.0"
+bitflags = "1.0"
+
+[target.'cfg(unix)'.dependencies]
+nix = "0.11"
+
+[replace]
+"libc:0.2.42" = {git = "https://github.com/rust-lang/libc"}
+
+[target.'cfg(windows)'.dependencies]
+winapi = "0.3"
