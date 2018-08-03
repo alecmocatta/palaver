@@ -52,17 +52,17 @@ pub fn socket<T: Into<Option<socket::SockProtocol>>>(
 		)]
 		{
 			use nix::fcntl;
-			let mut flags_ = fcntl::OFlag::from_bits(
-				fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFL).unwrap(),
-			).unwrap();
+			let mut flags_ =
+				fcntl::OFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFL).unwrap())
+					.unwrap();
 			flags_.set(
 				fcntl::OFlag::O_NONBLOCK,
 				flags.contains(SockFlag::SOCK_NONBLOCK),
 			);
 			let _ = fcntl::fcntl(fd, fcntl::FcntlArg::F_SETFL(flags_)).unwrap();
-			let mut flags_ = fcntl::FdFlag::from_bits(
-				fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap(),
-			).unwrap();
+			let mut flags_ =
+				fcntl::FdFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap())
+					.unwrap();
 			flags_.set(
 				fcntl::FdFlag::FD_CLOEXEC,
 				flags.contains(SockFlag::SOCK_CLOEXEC),
@@ -139,8 +139,12 @@ pub fn is_connected(fd: Fd) -> bool {
 
 /// Count of bytes that have yet to be read from a socket
 pub fn unreceived(fd: Fd) -> usize {
+	#[cfg(not(any(target_os = "macos", target_os = "ios")))]
+	use nix::libc::FIONREAD;
+	#[cfg(any(target_os = "macos", target_os = "ios"))]
+	pub const FIONREAD: libc::c_ulong = 0x4004_667f; // TODO remove when 0.2.43 is published
 	let mut available: libc::c_int = 0;
-	let err = unsafe { libc::ioctl(fd, libc::FIONREAD, &mut available) };
+	let err = unsafe { libc::ioctl(fd, FIONREAD, &mut available) };
 	assert!(err == 0 && available >= 0);
 	available as usize
 }

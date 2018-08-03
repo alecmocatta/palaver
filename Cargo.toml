@@ -4,7 +4,7 @@ version = "0.1.0"
 license = "Apache-2.0"
 authors = ["Alec Mocatta <alec@mocatta.net>"]
 categories = ["os::unix-apis","os::windows-apis","os::macos-apis"]
-keywords = ["polyfill","pal","platform-abstraction-layer"]
+keywords = ["polyfill","pal","platform-abstraction"]
 description = """
 Cross-platform polyfills.
 
@@ -31,9 +31,6 @@ bitflags = "1.0"
 
 [target.'cfg(unix)'.dependencies]
 nix = "0.11"
-
-[replace]
-"libc:0.2.42" = {git = "https://github.com/rust-lang/libc"}
 
 [target.'cfg(windows)'.dependencies]
 winapi = "0.3"

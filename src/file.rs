@@ -134,14 +134,14 @@ pub fn pipe(flags: fcntl::OFlag) -> Result<(Fd, Fd), nix::Error> {
 	{
 		unistd::pipe().map(|(read, write)| {
 			fn apply(fd: Fd, new_flags: fcntl::OFlag) {
-				let mut flags = fcntl::OFlag::from_bits(
-					fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFL).unwrap(),
-				).unwrap();
+				let mut flags =
+					fcntl::OFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFL).unwrap())
+						.unwrap();
 				flags |= new_flags & !fcntl::OFlag::O_CLOEXEC;
 				let _ = fcntl::fcntl(fd, fcntl::FcntlArg::F_SETFL(flags)).unwrap();
-				let mut flags = fcntl::FdFlag::from_bits(
-					fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap(),
-				).unwrap();
+				let mut flags =
+					fcntl::FdFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap())
+						.unwrap();
 				flags.set(
 					fcntl::FdFlag::FD_CLOEXEC,
 					new_flags.contains(fcntl::OFlag::O_CLOEXEC),

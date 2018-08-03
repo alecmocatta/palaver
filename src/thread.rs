@@ -48,8 +48,7 @@ where
 		.spawn(move || {
 			drop(sender);
 			f()
-		})
-		.unwrap();
+		}).unwrap();
 	if let Err(sync::mpsc::RecvError) = receiver.recv() {
 	} else {
 		unreachable!()
