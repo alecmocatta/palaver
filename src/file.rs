@@ -14,7 +14,7 @@ use std::{
 /// Maps file descriptors [(from,to)]
 pub fn move_fds(fds: &mut [(Fd, Fd)]) {
 	loop {
-		#[cfg_attr(feature = "cargo-clippy", allow(never_loop))]
+		#[allow(clippy::never_loop)]
 		let i = 'a: loop {
 			for (i, &(from, to)) in fds.iter().enumerate() {
 				if from == to {
@@ -40,7 +40,8 @@ pub fn move_fds(fds: &mut [(Fd, Fd)]) {
 			} else {
 				fcntl::OFlag::empty()
 			},
-		).unwrap();
+		)
+		.unwrap();
 		let _ = fcntl::fcntl(to, fcntl::FcntlArg::F_SETFD(flags)).unwrap();
 		unistd::close(from).unwrap();
 		fds[i].0 = to;
@@ -53,7 +54,8 @@ pub fn seal(fd: Fd) {
 		&fd_path(fd).unwrap(),
 		fcntl::OFlag::O_RDONLY,
 		stat::Mode::empty(),
-	).unwrap();
+	)
+	.unwrap();
 	let flags =
 		fcntl::FdFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap()).unwrap();
 	unistd::close(fd).unwrap();
@@ -65,7 +67,8 @@ pub fn seal(fd: Fd) {
 		} else {
 			fcntl::OFlag::empty()
 		},
-	).unwrap();
+	)
+	.unwrap();
 	unistd::close(fd2).unwrap();
 }
 
@@ -78,7 +81,8 @@ pub fn dup(oldfd: Fd, flags: fcntl::OFlag) -> Result<Fd, nix::Error> {
 		} else {
 			fcntl::FcntlArg::F_DUPFD(oldfd)
 		},
-	).map(|newfd| {
+	)
+	.map(|newfd| {
 		assert_ne!(oldfd, newfd);
 		newfd
 	})
@@ -87,11 +91,8 @@ pub fn dup(oldfd: Fd, flags: fcntl::OFlag) -> Result<Fd, nix::Error> {
 pub fn dup_to(oldfd: Fd, newfd: Fd, flags: fcntl::OFlag) -> Result<(), nix::Error> {
 	assert_ne!(oldfd, newfd);
 	#[cfg_attr(
-		all(
-			feature = "cargo-clippy",
-			not(any(target_os = "android", target_os = "linux"))
-		),
-		allow(never_loop)
+		not(any(target_os = "android", target_os = "linux")),
+		allow(clippy::never_loop)
 	)]
 	loop {
 		match unistd::dup3(oldfd, newfd, flags) {
@@ -99,38 +100,33 @@ pub fn dup_to(oldfd: Fd, newfd: Fd, flags: fcntl::OFlag) -> Result<(), nix::Erro
 			Err(nix::Error::Sys(errno::Errno::EBUSY)) => continue, // only occurs on Linux
 			a => break a,
 		}
-	}.map(|fd| assert_eq!(fd, newfd))
+	}
+	.map(|fd| assert_eq!(fd, newfd))
 }
 
 /// Like pipe2; not atomic on platforms that lack it
 pub fn pipe(flags: fcntl::OFlag) -> Result<(Fd, Fd), nix::Error> {
-	#[cfg(
-		any(
-			target_os = "android",
-			target_os = "dragonfly",
-			target_os = "emscripten",
-			target_os = "freebsd",
-			target_os = "linux",
-			target_os = "netbsd",
-			target_os = "openbsd"
-		)
-	)]
+	#[cfg(any(
+		target_os = "android",
+		target_os = "dragonfly",
+		target_os = "emscripten",
+		target_os = "freebsd",
+		target_os = "linux",
+		target_os = "netbsd",
+		target_os = "openbsd"
+	))]
 	{
 		unistd::pipe2(flags)
 	}
-	#[cfg(
-		not(
-			any(
-				target_os = "android",
-				target_os = "dragonfly",
-				target_os = "emscripten",
-				target_os = "freebsd",
-				target_os = "linux",
-				target_os = "netbsd",
-				target_os = "openbsd"
-			)
-		)
-	)]
+	#[cfg(not(any(
+		target_os = "android",
+		target_os = "dragonfly",
+		target_os = "emscripten",
+		target_os = "freebsd",
+		target_os = "linux",
+		target_os = "netbsd",
+		target_os = "openbsd"
+	)))]
 	{
 		unistd::pipe().map(|(read, write)| {
 			fn apply(fd: Fd, new_flags: fcntl::OFlag) {
@@ -185,11 +181,12 @@ pub fn memfd_create(name: &CStr, cloexec: bool) -> Result<Fd, nix::Error> {
 			&name,
 			fcntl::OFlag::O_RDWR | fcntl::OFlag::O_CREAT | fcntl::OFlag::O_EXCL,
 			stat::Mode::S_IRWXU,
-		).map(|fd| {
+		)
+		.map(|fd| {
 			if !cloexec {
-				let mut flags_ = fcntl::FdFlag::from_bits(
-					fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap(),
-				).unwrap();
+				let mut flags_ =
+					fcntl::FdFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap())
+						.unwrap();
 				flags_.remove(fcntl::FdFlag::FD_CLOEXEC);
 				let _ = fcntl::fcntl(fd, fcntl::FcntlArg::F_SETFD(flags_)).unwrap();
 			}
@@ -208,9 +205,9 @@ pub fn memfd_create(name: &CStr, cloexec: bool) -> Result<Fd, nix::Error> {
 			unistd::unlink(path.as_path()).unwrap();
 			stat::fchmod(fd, stat::Mode::S_IRWXU).unwrap();
 			if cloexec {
-				let mut flags_ = fcntl::FdFlag::from_bits(
-					fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap(),
-				).unwrap();
+				let mut flags_ =
+					fcntl::FdFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap())
+						.unwrap();
 				flags_.insert(fcntl::FdFlag::FD_CLOEXEC);
 				let _ = fcntl::fcntl(fd, fcntl::FcntlArg::F_SETFD(flags_)).unwrap();
 			}
@@ -221,29 +218,23 @@ pub fn memfd_create(name: &CStr, cloexec: bool) -> Result<Fd, nix::Error> {
 
 /// Falls back to execve("/proc/self/fd/{fd}",...), falls back to execve("/tmp/{randomfilename}")
 pub fn fexecve(fd: Fd, arg: &[CString], env: &[CString]) -> Result<void::Void, nix::Error> {
-	#[cfg(
-		any(
-			target_os = "android",
-			target_os = "freebsd",
-			target_os = "linux",
-			target_os = "netbsd",
-			target_os = "openbsd"
-		)
-	)]
+	#[cfg(any(
+		target_os = "android",
+		target_os = "freebsd",
+		target_os = "linux",
+		target_os = "netbsd",
+		target_os = "openbsd"
+	))]
 	{
 		unistd::fexecve(fd, arg, env)
 	}
-	#[cfg(
-		not(
-			any(
-				target_os = "android",
-				target_os = "freebsd",
-				target_os = "linux",
-				target_os = "netbsd",
-				target_os = "openbsd"
-			)
-		)
-	)]
+	#[cfg(not(any(
+		target_os = "android",
+		target_os = "freebsd",
+		target_os = "linux",
+		target_os = "netbsd",
+		target_os = "openbsd"
+	)))]
 	{
 		use std::{
 			ffi::OsString, os::unix::{ffi::OsStringExt, io::FromRawFd}, process
@@ -251,10 +242,12 @@ pub fn fexecve(fd: Fd, arg: &[CString], env: &[CString]) -> Result<void::Void, n
 		unistd::execve(
 			&CString::new(<OsString as OsStringExt>::into_vec(
 				fd_path(fd).unwrap().into(),
-			)).unwrap(),
+			))
+			.unwrap(),
 			arg,
 			env,
-		).or_else(|_e| {
+		)
+		.or_else(|_e| {
 			let mut random: [u8; 16] = unsafe { mem::uninitialized() };
 			// thread_rng uses getrandom(2) on >=3.17 (same as memfd_create), permanently opens /dev/urandom on fail, which messes our fd numbers. TODO: less assumptive about fd numbers..
 			let rand = fs::File::open("/dev/urandom").expect("Couldn't open /dev/urandom");
@@ -269,7 +262,8 @@ pub fn fexecve(fd: Fd, arg: &[CString], env: &[CString]) -> Result<void::Void, n
 						// cloexec
 						let mut flags_ = fcntl::FdFlag::from_bits(
 							fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap(),
-						).unwrap();
+						)
+						.unwrap();
 						flags_.insert(fcntl::FdFlag::FD_CLOEXEC);
 						let _ = fcntl::fcntl(fd, fcntl::FcntlArg::F_SETFD(flags_)).unwrap();
 					}
@@ -289,7 +283,8 @@ pub fn fexecve(fd: Fd, arg: &[CString], env: &[CString]) -> Result<void::Void, n
 					&CString::new(<OsString as OsStringExt>::into_vec(to_path.into())).unwrap(),
 					arg,
 					env,
-				).map_err(|e| {
+				)
+				.map_err(|e| {
 					let _ = unistd::write(write, &[0]).unwrap();
 					unistd::close(write).unwrap();
 					e

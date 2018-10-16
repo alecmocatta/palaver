@@ -17,16 +17,14 @@ pub fn socket<T: Into<Option<socket::SockProtocol>>>(
 ) -> Result<Fd, nix::Error> {
 	let mut flags_ = socket::SockFlag::empty();
 	flags_ = flags_;
-	#[cfg(
-		any(
-			target_os = "android",
-			target_os = "dragonfly",
-			target_os = "freebsd",
-			target_os = "linux",
-			target_os = "netbsd",
-			target_os = "openbsd"
-		)
-	)]
+	#[cfg(any(
+		target_os = "android",
+		target_os = "dragonfly",
+		target_os = "freebsd",
+		target_os = "linux",
+		target_os = "netbsd",
+		target_os = "openbsd"
+	))]
 	{
 		flags_.set(
 			socket::SockFlag::SOCK_NONBLOCK,
@@ -38,18 +36,14 @@ pub fn socket<T: Into<Option<socket::SockProtocol>>>(
 		);
 	}
 	socket::socket(domain, ty, flags_, protocol).map(|fd| {
-		#[cfg(
-			not(
-				any(
-					target_os = "android",
-					target_os = "dragonfly",
-					target_os = "freebsd",
-					target_os = "linux",
-					target_os = "netbsd",
-					target_os = "openbsd"
-				)
-			)
-		)]
+		#[cfg(not(any(
+			target_os = "android",
+			target_os = "dragonfly",
+			target_os = "freebsd",
+			target_os = "linux",
+			target_os = "netbsd",
+			target_os = "openbsd"
+		)))]
 		{
 			use nix::fcntl;
 			let mut flags_ =
@@ -74,14 +68,12 @@ pub fn socket<T: Into<Option<socket::SockProtocol>>>(
 }
 /// Like accept4, falls back to non-atomic accept
 pub fn accept(sockfd: Fd, flags: SockFlag) -> Result<Fd, nix::Error> {
-	#[cfg(
-		any(
-			target_os = "android",
-			target_os = "freebsd",
-			target_os = "linux",
-			target_os = "openbsd"
-		)
-	)]
+	#[cfg(any(
+		target_os = "android",
+		target_os = "freebsd",
+		target_os = "linux",
+		target_os = "openbsd"
+	))]
 	{
 		let mut flags_ = socket::SockFlag::empty();
 		flags_.set(
@@ -94,16 +86,12 @@ pub fn accept(sockfd: Fd, flags: SockFlag) -> Result<Fd, nix::Error> {
 		);
 		socket::accept4(sockfd, flags_)
 	}
-	#[cfg(
-		not(
-			any(
-				target_os = "android",
-				target_os = "freebsd",
-				target_os = "linux",
-				target_os = "openbsd"
-			)
-		)
-	)]
+	#[cfg(not(any(
+		target_os = "android",
+		target_os = "freebsd",
+		target_os = "linux",
+		target_os = "openbsd"
+	)))]
 	{
 		use nix::fcntl;
 		socket::accept(sockfd).map(|fd| {
@@ -114,9 +102,9 @@ pub fn accept(sockfd: Fd, flags: SockFlag) -> Result<Fd, nix::Error> {
 				flags.contains(SockFlag::SOCK_NONBLOCK),
 			);
 			let _ = fcntl::fcntl(fd, fcntl::FcntlArg::F_SETFL(flags_)).unwrap();
-			let mut flags_ = fcntl::FdFlag::from_bits(
-				fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap(),
-			).unwrap();
+			let mut flags_ =
+				fcntl::FdFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap())
+					.unwrap();
 			flags_.set(
 				fcntl::FdFlag::FD_CLOEXEC,
 				flags.contains(SockFlag::SOCK_CLOEXEC),
@@ -139,12 +127,8 @@ pub fn is_connected(fd: Fd) -> bool {
 
 /// Count of bytes that have yet to be read from a socket
 pub fn unreceived(fd: Fd) -> usize {
-	#[cfg(not(any(target_os = "macos", target_os = "ios")))]
-	use nix::libc::FIONREAD;
-	#[cfg(any(target_os = "macos", target_os = "ios"))]
-	pub const FIONREAD: libc::c_ulong = 0x4004_667f; // TODO remove when 0.2.43 is published
 	let mut available: libc::c_int = 0;
-	let err = unsafe { libc::ioctl(fd, FIONREAD, &mut available) };
+	let err = unsafe { libc::ioctl(fd, libc::FIONREAD, &mut available) };
 	assert!(err == 0 && available >= 0);
 	available as usize
 }
@@ -163,16 +147,12 @@ pub fn unsent(fd: Fd) -> usize {
 			&mut (std::mem::size_of_val(&unsent) as libc::socklen_t),
 		)
 	};
-	#[cfg(
-		not(
-			any(
-				target_os = "android",
-				target_os = "linux",
-				target_os = "macos",
-				target_os = "ios"
-			)
-		)
-	)]
+	#[cfg(not(any(
+		target_os = "android",
+		target_os = "linux",
+		target_os = "macos",
+		target_os = "ios"
+	)))]
 	compile_error!("x");
 	assert!(err == 0 && unsent >= 0, "{} {}", err, unsent);
 	unsent as usize
