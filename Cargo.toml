@@ -24,10 +24,11 @@ travis-ci = { repository = "alecmocatta/palaver" }
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-proc_self = "0.1"
 valgrind_request = "1.1"
 void = "1.0"
 bitflags = "1.0"
+libc = "0.2.43"
+proc_self = { version = "0.1" } #, path = "../proc_self" }
 
 [target.'cfg(unix)'.dependencies]
 nix = "0.11"

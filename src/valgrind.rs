@@ -18,12 +18,12 @@ fn getrlimit(resource: libc::c_int) -> Result<libc::rlimit, nix::Error> {
 }
 
 /// Check if we're running under valgrind
-#[cfg_attr(feature = "cargo-clippy", allow(stutter))]
+#[allow(clippy::stutter)]
 pub fn is_valgrind() -> bool {
 	valgrind_request::running_on_valgrind() > 0
 }
 /// Valgrind sets up various file descriptors for its purposes; they're all > any user fds, and this function gets the lowest of them
-#[cfg_attr(feature = "cargo-clippy", allow(stutter))]
+#[allow(clippy::stutter)]
 pub fn valgrind_start_fd() -> Fd {
 	let rlim = getrlimit(libc::RLIMIT_NOFILE).unwrap();
 	let valgrind_start_fd = rlim.rlim_max;

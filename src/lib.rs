@@ -18,19 +18,16 @@
 	unused_import_braces,
 	unused_qualifications,
 	unused_results,
+	clippy::pedantic
 )] // from https://github.com/rust-unofficial/patterns/blob/master/anti_patterns/deny-warnings.md
-#![cfg_attr(feature = "cargo-clippy", warn(clippy_pedantic))]
-#![cfg_attr(
-	feature = "cargo-clippy",
-	allow(
-		inline_always,
-		doc_markdown,
-		if_not_else,
-		indexing_slicing,
-		cast_sign_loss,
-		cast_possible_truncation,
-		cast_possible_wrap
-	)
+#![allow(
+	clippy::inline_always,
+	clippy::doc_markdown,
+	clippy::if_not_else,
+	clippy::indexing_slicing,
+	clippy::cast_sign_loss,
+	clippy::cast_possible_truncation,
+	clippy::cast_possible_wrap
 )]
 
 #[cfg(unix)]

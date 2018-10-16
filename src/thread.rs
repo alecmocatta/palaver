@@ -42,16 +42,24 @@ where
 	F: Send + 'static,
 	T: Send + 'static,
 {
+	// #[cfg(any(target_os = "macos", target_os = "ios"))]
+	// {
 	let (sender, receiver) = sync::mpsc::channel::<()>();
 	let ret = thread::Builder::new()
 		.name(name)
 		.spawn(move || {
 			drop(sender);
 			f()
-		}).unwrap();
+		})
+		.unwrap();
 	if let Err(sync::mpsc::RecvError) = receiver.recv() {
 	} else {
 		unreachable!()
 	}
 	ret
+	// }
+	// #[cfg(not(any(target_os = "macos", target_os = "ios")))]
+	// {
+	// 	thread::Builder::new().name(name).spawn(f).unwrap()
+	// }
 }
