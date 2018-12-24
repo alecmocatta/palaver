@@ -28,7 +28,7 @@ pub fn valgrind_start_fd() -> Fd {
 	let rlim = getrlimit(libc::RLIMIT_NOFILE).unwrap();
 	let valgrind_start_fd = rlim.rlim_max;
 	assert!(
-		valgrind_start_fd < Fd::max_value() as u64,
+		valgrind_start_fd < Fd::max_value() as _,
 		"{:?}",
 		valgrind_start_fd
 	);
