@@ -325,6 +325,7 @@ where
 	}
 	Ok(())
 }
+
 /// Loops sendfile till len elapsed or error
 pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Result<(), nix::Error> {
 	#[cfg(any(target_os = "android", target_os = "linux"))]
@@ -360,7 +361,30 @@ pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Resu
 		}
 		Ok(())
 	}
+	#[cfg(target_os = "freebsd")]
+	{
+		use nix::sys::sendfile;
+		let mut offset = 0;
+		while offset != len {
+			let (result, n) = sendfile::sendfile(
+				in_.as_raw_fd(),
+				out.as_raw_fd(),
+				0,
+				Some((len - offset) as usize),
+				None,
+				None,
+				sendfile::SfFlags::empty(),
+				0,
+			);
+			result?;
+			assert!(0 < n && n as u64 <= len - offset);
+			offset += n as u64;
+		}
+		Ok(())
+
+	}
 }
+
 /// Loops splice till len elapsed or error
 #[cfg(any(target_os = "android", target_os = "linux"))]
 pub fn copy_splice<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Result<(), nix::Error> {
