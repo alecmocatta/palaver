@@ -162,7 +162,15 @@ pub fn memfd_create(name: &CStr, cloexec: bool) -> Result<Fd, nix::Error> {
 			memfd::memfd_create(name, flags)
 			// Err(nix::Error::Sys(errno::Errno::ENOSYS)) => None,
 		}
-		#[cfg(not(any(target_os = "android", target_os = "linux")))]
+		#[cfg(target_os = "freebsd")]
+		{
+			let _ = name;
+			let flags = if cloexec { fcntl::OFlag::O_RDWR | fcntl::OFlag::O_CLOEXEC } else { fcntl::OFlag::O_RDWR };
+			errno::Errno::result(unsafe {
+				libc::shm_open(libc::SHM_ANON, flags.bits(), stat::Mode::S_IRWXU.bits())
+			})
+		}
+		#[cfg(not(any(target_os = "android", target_os = "linux", target_os = "freebsd")))]
 		{
 			let _ = name;
 			Err(nix::Error::Sys(errno::Errno::ENOSYS))
