@@ -1,14 +1,16 @@
+//! File and file descriptor-related functionality
+
 use super::*;
 use ext::ToHex;
 #[cfg(unix)]
 use nix::{errno, fcntl, sys::stat, unistd};
 use proc_self::fd_path;
+use std::{
+	convert::TryInto, fs, io::{self, Read, Write}, mem, path
+};
 #[cfg(unix)]
 use std::{
 	ffi::{CStr, CString}, os::unix::io::AsRawFd
-};
-use std::{
-	fs, io::{self, Read, Write}, mem, path
 };
 
 /// Maps file descriptors [(from,to)]
@@ -328,7 +330,7 @@ pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Resu
 				out.as_raw_fd(),
 				in_.as_raw_fd(),
 				None,
-				(len - offset) as usize,
+				(len - offset).try_into().unwrap(),
 			)? as u64;
 		}
 		Ok(())
@@ -342,13 +344,14 @@ pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Resu
 				in_.as_raw_fd(),
 				out.as_raw_fd(),
 				0,
-				Some((len - offset) as i64),
+				Some((len - offset).try_into().unwrap()),
 				None,
 				None,
 			);
 			result?;
-			assert!(0 < n && n as u64 <= len - offset);
-			offset += n as u64;
+			let n: u64 = n.try_into().unwrap();
+			assert!(n <= len - offset);
+			offset += n;
 		}
 		Ok(())
 	}
@@ -363,7 +366,7 @@ pub fn copy_splice<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Result
 			None,
 			out.as_raw_fd(),
 			None,
-			(len - offset) as usize,
+			(len - offset).try_into().unwrap(),
 			fcntl::SpliceFFlags::empty(),
 		)? as u64;
 	}

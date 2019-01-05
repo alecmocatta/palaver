@@ -1,8 +1,11 @@
+//! Socket-related functionality
+
 use super::*;
 #[cfg(unix)]
 use nix::{libc, poll, sys::socket};
+use std::convert::TryInto;
 
-bitflags!{
+bitflags! {
 	/// Akin to nix::sys::socket::SockFlag but avail cross-platform
 	pub struct SockFlag: libc::c_int {
 		#[allow(missing_docs)]
@@ -130,7 +133,7 @@ pub fn unreceived(fd: Fd) -> usize {
 	let mut available: libc::c_int = 0;
 	let err = unsafe { libc::ioctl(fd, libc::FIONREAD, &mut available) };
 	assert!(err == 0 && available >= 0);
-	available as usize
+	available.try_into().unwrap()
 }
 /// Count of bytes that have been written to a socket, but have yet to be acked by the remote end
 pub fn unsent(fd: Fd) -> usize {
@@ -144,7 +147,7 @@ pub fn unsent(fd: Fd) -> usize {
 			libc::SOL_SOCKET,
 			libc::SO_NWRITE,
 			&mut unsent as *mut libc::c_int as *mut libc::c_void,
-			&mut (std::mem::size_of_val(&unsent) as libc::socklen_t),
+			&mut (std::mem::size_of_val(&unsent).try_into().unwrap()),
 		)
 	};
 	#[cfg(not(any(
@@ -155,5 +158,5 @@ pub fn unsent(fd: Fd) -> usize {
 	)))]
 	compile_error!("x");
 	assert!(err == 0 && unsent >= 0, "{} {}", err, unsent);
-	unsent as usize
+	unsent.try_into().unwrap()
 }
