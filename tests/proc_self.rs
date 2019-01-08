@@ -1,6 +1,6 @@
 extern crate palaver;
 
-use palaver::proc_self::*;
+use palaver::proc::*;
 use std::fs;
 
 fn main() {

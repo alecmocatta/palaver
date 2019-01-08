@@ -4,7 +4,7 @@ use super::*;
 use ext::ToHex;
 #[cfg(unix)]
 use nix::{errno, fcntl, sys::stat, unistd};
-use proc_self::fd_path;
+use proc::fd_path;
 use std::{
 	convert::TryInto, fs, io::{self, Read, Write}, mem, path
 };
