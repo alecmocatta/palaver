@@ -19,19 +19,19 @@ matrix:
   include:
     - os: linux
       dist: precise # https://docs.travis-ci.com/user/reference/overview/
-      env: COMPILE="i686-unknown-freebsd x86_64-unknown-freebsd" BUILD="" RUN="x86_64-unknown-linux-gnu i686-unknown-linux-gnu x86_64-unknown-linux-musl i686-unknown-linux-musl" RUSTFLAGS_VARIATIONS=";" DIST="precise" # ;-Cpanic=abort;-Clinker=gold
+      env: COMPILE="" BUILD="" RUN="x86_64-unknown-linux-gnu i686-unknown-linux-gnu x86_64-unknown-linux-musl i686-unknown-linux-musl" RUSTFLAGS_VARIATIONS=";" DIST="precise" # ;-Cpanic=abort;-Clinker=gold
     - os: linux
       dist: trusty
-      env: COMPILE="i686-unknown-freebsd x86_64-unknown-freebsd" BUILD="" RUN="x86_64-unknown-linux-gnu i686-unknown-linux-gnu x86_64-unknown-linux-musl i686-unknown-linux-musl" RUSTFLAGS_VARIATIONS=";" DIST="trusty" # ;-Cpanic=abort;-Clinker=gold
+      env: COMPILE="" BUILD="" RUN="x86_64-unknown-linux-gnu i686-unknown-linux-gnu x86_64-unknown-linux-musl i686-unknown-linux-musl" RUSTFLAGS_VARIATIONS=";" DIST="trusty" # ;-Cpanic=abort;-Clinker=gold
     - os: linux
       dist: xenial
-      env: COMPILE="i686-unknown-freebsd x86_64-unknown-freebsd" BUILD="" RUN="x86_64-unknown-linux-gnu i686-unknown-linux-gnu x86_64-unknown-linux-musl i686-unknown-linux-musl" RUSTFLAGS_VARIATIONS=";" DIST="trusty" # ;-Cpanic=abort;-Clinker=gold
+      env: COMPILE="i686-pc-windows-gnu x86_64-pc-windows-gnu i686-unknown-freebsd x86_64-unknown-freebsd" BUILD="" RUN="x86_64-unknown-linux-gnu i686-unknown-linux-gnu x86_64-unknown-linux-musl i686-unknown-linux-musl" RUSTFLAGS_VARIATIONS=";" DIST="trusty" # ;-Cpanic=abort;-Clinker=gold
     - os: osx
       osx_image: xcode6.4 # https://docs.travis-ci.com/user/reference/osx/
-      env: COMPILE="" BUILD="x86_64-unknown-linux-musl i686-unknown-linux-musl" RUN="x86_64-apple-darwin i686-apple-darwin" RUSTFLAGS_VARIATIONS=";" # ;-Cpanic=abort
+      env: COMPILE="" BUILD="" RUN="x86_64-apple-darwin i686-apple-darwin" RUSTFLAGS_VARIATIONS=";" # ;-Cpanic=abort
     - os: osx
       osx_image: xcode8.3
-      env: COMPILE="" BUILD="x86_64-unknown-linux-musl i686-unknown-linux-musl" RUN="x86_64-apple-darwin i686-apple-darwin" RUSTFLAGS_VARIATIONS=";" # ;-Cpanic=abort
+      env: COMPILE="" BUILD="" RUN="x86_64-apple-darwin i686-apple-darwin" RUSTFLAGS_VARIATIONS=";" # ;-Cpanic=abort
     - os: osx
       osx_image: xcode9.4
       env: COMPILE="" BUILD="x86_64-unknown-linux-musl i686-unknown-linux-musl" RUN="x86_64-apple-darwin i686-apple-darwin" RUSTFLAGS_VARIATIONS=";" # ;-Cpanic=abort

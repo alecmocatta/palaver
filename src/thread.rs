@@ -49,13 +49,9 @@ pub fn gettid() -> u64 {
 		}
 		(unsafe { pthread_getthreadid_np() }).try_into().unwrap()
 	}
-
 	#[cfg(windows)]
 	{
-		extern "C" {
-			fn GetCurrentThreadId() -> libc::c_ulong;
-		}
-		(unsafe { GetCurrentThreadId() }).into()
+		(unsafe { winapi::um::processthreadsapi::GetCurrentThreadId() }).into()
 	}
 }
 
