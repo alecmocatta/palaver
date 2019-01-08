@@ -26,7 +26,9 @@
 	clippy::doc_markdown,
 	clippy::if_not_else,
 	clippy::indexing_slicing,
-	clippy::shadow_unrelated
+	clippy::shadow_unrelated,
+	clippy::similar_names,
+	clippy::module_name_repetitions
 )]
 
 #[cfg(unix)]
@@ -42,6 +44,7 @@ extern crate mach;
 
 mod ext;
 pub mod file;
+pub mod fork;
 pub mod proc;
 pub mod socket;
 pub mod thread;

@@ -4,7 +4,7 @@
 //!
 //! # Examples
 //!
-//! ```rust,ignore
+//! ```
 //! extern crate nix;
 //! extern crate palaver;
 //!

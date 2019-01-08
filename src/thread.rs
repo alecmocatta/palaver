@@ -2,6 +2,13 @@
 
 #[cfg(unix)]
 use nix::libc;
+#[cfg(any(
+	target_os = "android",
+	target_os = "linux",
+	target_os = "macos",
+	target_os = "ios",
+	target_os = "freebsd"
+))]
 use std::convert::TryInto;
 
 /// Get an identifier for the thread;
@@ -40,7 +47,7 @@ pub fn gettid() -> u64 {
 		extern "C" {
 			fn pthread_getthreadid_np() -> libc::c_int;
 		}
-		(unsafe { pthread_getthreadid_np() }) as u64
+		(unsafe { pthread_getthreadid_np() }).try_into().unwrap()
 	}
 
 	#[cfg(windows)]
@@ -48,7 +55,7 @@ pub fn gettid() -> u64 {
 		extern "C" {
 			fn GetCurrentThreadId() -> libc::c_ulong;
 		}
-		(unsafe { GetCurrentThreadId() }) as u64
+		(unsafe { GetCurrentThreadId() }).into()
 	}
 }
 
@@ -101,4 +108,11 @@ pub fn count() -> usize {
 		assert_eq!(kret, KERN_SUCCESS);
 		thread_count
 	}
+	#[cfg(not(any(
+		target_os = "android",
+		target_os = "linux",
+		target_os = "macos",
+		target_os = "ios"
+	)))]
+	unimplemented!()
 }

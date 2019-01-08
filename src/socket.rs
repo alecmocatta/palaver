@@ -132,10 +132,10 @@ pub fn is_connected(fd: Fd) -> bool {
 pub fn unreceived(fd: Fd) -> usize {
 	let mut available: libc::c_int = 0;
 	let err = unsafe { libc::ioctl(fd, libc::FIONREAD, &mut available) };
-	assert!(err == 0 && available >= 0);
+	assert_eq!(err, 0);
 	available.try_into().unwrap()
 }
-/// Count of bytes that have been written to a socket, but have yet to be acked by the remote end
+/// Count of bytes that have been written to a socket, but have yet to be acked by the remote end. Works on Android, Linux, macOS, iOS, FreeBSD and NetBSD, returns 0 on others.
 pub fn unsent(fd: Fd) -> usize {
 	let mut unsent: libc::c_int = 0;
 	#[cfg(any(target_os = "android", target_os = "linux"))]
@@ -150,13 +150,18 @@ pub fn unsent(fd: Fd) -> usize {
 			&mut (std::mem::size_of_val(&unsent).try_into().unwrap()),
 		)
 	};
+	#[cfg(any(target_os = "freebsd", target_os = "netbsd"))]
+	let err = unsafe { libc::ioctl(fd, libc::FIONWRITE, &mut unsent) };
+	// https://docs.microsoft.com/en-gb/windows/desktop/api/iphlpapi/nf-iphlpapi-getpertcpconnectionestats TcpConnectionEstatsSendBuff
 	#[cfg(not(any(
 		target_os = "android",
 		target_os = "linux",
 		target_os = "macos",
-		target_os = "ios"
+		target_os = "ios",
+		target_os = "freebsd",
+		target_os = "netbsd"
 	)))]
-	compile_error!("x");
-	assert!(err == 0 && unsent >= 0, "{} {}", err, unsent);
+	let err = 0;
+	assert_eq!(err, 0);
 	unsent.try_into().unwrap()
 }
