@@ -28,10 +28,20 @@ valgrind_request = "1.1"
 void = "1.0"
 bitflags = "1.0"
 libc = "0.2.43"
-proc_self = { version = "0.1" } #, path = "../proc_self" }
 
 [target.'cfg(unix)'.dependencies]
 nix = "0.11"
 
 [target.'cfg(windows)'.dependencies]
 winapi = "0.3"
+
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
+mach = "0.2"
+
+[target.'cfg(any(target_os = "android", target_os = "linux"))'.dependencies]
+procinfo = "0.4"
+
+[[test]]
+name = "test"
+path = "tests/proc_self.rs"
+harness = false

@@ -1,6 +1,9 @@
+//! Valgrind-related functionality
+
 use super::*;
 #[cfg(unix)]
 use nix::{errno, libc};
+use std::convert::{TryFrom, TryInto};
 #[cfg(unix)]
 use std::mem;
 
@@ -18,19 +21,17 @@ fn getrlimit(resource: libc::c_int) -> Result<libc::rlimit, nix::Error> {
 }
 
 /// Check if we're running under valgrind
-#[allow(clippy::stutter)]
-pub fn is_valgrind() -> bool {
+pub fn is() -> bool {
 	valgrind_request::running_on_valgrind() > 0
 }
 /// Valgrind sets up various file descriptors for its purposes; they're all > any user fds, and this function gets the lowest of them
-#[allow(clippy::stutter)]
-pub fn valgrind_start_fd() -> Fd {
+pub fn start_fd() -> Fd {
 	let rlim = getrlimit(libc::RLIMIT_NOFILE).unwrap();
 	let valgrind_start_fd = rlim.rlim_max;
 	assert!(
-		valgrind_start_fd < Fd::max_value() as _,
+		valgrind_start_fd < Fd::max_value().try_into().unwrap(),
 		"{:?}",
 		valgrind_start_fd
 	);
-	valgrind_start_fd as Fd
+	valgrind_start_fd.try_into().unwrap()
 }
