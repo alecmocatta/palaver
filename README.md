@@ -1,7 +1,7 @@
 # palaver
 
 [![Crates.io](https://img.shields.io/crates/v/palaver.svg?maxAge=86400)](https://crates.io/crates/palaver)
-[![Apache-2.0 licensed](https://img.shields.io/crates/l/palaver.svg?maxAge=2592000)](LICENSE.txt)
+[![MIT / Apache 2.0 licensed](https://img.shields.io/crates/l/palaver.svg?maxAge=2592000)](#License)
 [![Build Status](https://circleci.com/gh/alecmocatta/palaver/tree/master.svg?style=shield)](https://circleci.com/gh/alecmocatta/palaver)
 [![Build Status](https://travis-ci.com/alecmocatta/palaver.svg?branch=master)](https://travis-ci.com/alecmocatta/palaver)
 
@@ -16,6 +16,11 @@ palaver = "Platform Abstraction Layer" / pa·lav·er *n.* – prolonged and tedi
 It's currently used on unix-family systems; most Windows functionality is TODO.
 
 ## License
-Licensed under Apache License, Version 2.0, ([LICENSE.txt](LICENSE.txt) or http://www.apache.org/licenses/LICENSE-2.0).
+Licensed under either of
 
-Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be licensed as above, without any additional terms or conditions.
+ * Apache License, Version 2.0, ([LICENSE-APACHE.txt](LICENSE-APACHE.txt) or http://www.apache.org/licenses/LICENSE-2.0)
+ * MIT license ([LICENSE-MIT.txt](LICENSE-MIT.txt) or http://opensource.org/licenses/MIT)
+
+at your option.
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.
