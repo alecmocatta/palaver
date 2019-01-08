@@ -31,17 +31,6 @@
 	clippy::module_name_repetitions
 )]
 
-// #[cfg(unix)]
-// extern crate nix;
-// extern crate valgrind_request;
-// extern crate void;
-// #[cfg(windows)]
-// extern crate winapi;
-// #[macro_use]
-// extern crate bitflags;
-// #[cfg(any(target_os = "macos", target_os = "ios"))]
-// extern crate mach;
-
 mod ext;
 pub mod file;
 #[cfg(unix)]

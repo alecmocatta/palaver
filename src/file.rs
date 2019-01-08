@@ -8,9 +8,17 @@ use ext::ToHex;
 use nix::{errno, fcntl, sys::stat, unistd};
 #[cfg(unix)]
 use proc::fd_path;
+#[cfg(any(
+	target_os = "linux",
+	target_os = "android",
+	target_os = "macos",
+	target_os = "ios",
+	target_os = "freebsd"
+))]
+use std::convert::TryInto;
 use std::io::{self, Read, Write};
 #[cfg(unix)]
-use std::{convert::TryInto, ffi::CStr, ffi::CString, fs, mem, os::unix::io::AsRawFd, path};
+use std::{ffi::CStr, ffi::CString, fs, mem, os::unix::io::AsRawFd, path};
 
 /// Maps file descriptors [(from,to)]
 #[cfg(unix)]
@@ -417,6 +425,19 @@ pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Resu
 			offset += n;
 		}
 		Ok(())
+	}
+	#[cfg(not(any(
+		target_os = "android",
+		target_os = "linux",
+		target_os = "ios",
+		target_os = "macos",
+		target_os = "freebsd"
+	)))]
+	{
+		let _ = (in_, out, len);
+		// void *addr = mmap(NULL, length, PROT_READ, MAP_FILE | MAP_SHARED, file descriptor, offset);
+		// send(socket, addr, length, 0);
+		unimplemented!()
 	}
 }
 
