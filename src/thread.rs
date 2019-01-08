@@ -4,7 +4,11 @@
 use nix::libc;
 use std::convert::TryInto;
 
-/// Get an identifier for the thread; uses gettid on linux; pthread_threadid_np on mac; GetCurrentThreadId on windows.
+/// Get an identifier for the thread;
+/// - uses gettid on Linux;
+/// - pthread_threadid_np on macOS;
+/// - pthread_getthreadid_np on FreeBSD;
+/// - GetCurrentThreadId on windows.
 #[inline]
 pub fn gettid() -> u64 {
 	#[cfg(any(target_os = "android", target_os = "linux"))]
@@ -30,6 +34,15 @@ pub fn gettid() -> u64 {
 		assert_eq!(err, 0);
 		tid
 	}
+	#[cfg(target_os = "freebsd")]
+	{
+		#[link(name = "pthread")]
+		extern "C" {
+			fn pthread_getthreadid_np() -> libc::c_int;
+		}
+		(unsafe { pthread_getthreadid_np() }) as u64
+	}
+
 	#[cfg(windows)]
 	{
 		extern "C" {

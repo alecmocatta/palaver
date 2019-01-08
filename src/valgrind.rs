@@ -3,7 +3,7 @@
 use super::*;
 #[cfg(unix)]
 use nix::{errno, libc};
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryInto;
 #[cfg(unix)]
 use std::mem;
 
@@ -29,7 +29,7 @@ pub fn start_fd() -> Fd {
 	let rlim = getrlimit(libc::RLIMIT_NOFILE).unwrap();
 	let valgrind_start_fd = rlim.rlim_max;
 	assert!(
-		valgrind_start_fd < u64::try_from(Fd::max_value()).unwrap(),
+		valgrind_start_fd < Fd::max_value().try_into().unwrap(),
 		"{:?}",
 		valgrind_start_fd
 	);
