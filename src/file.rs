@@ -167,7 +167,11 @@ pub fn memfd_create(name: &CStr, cloexec: bool) -> Result<Fd, nix::Error> {
 		#[cfg(target_os = "freebsd")]
 		{
 			let _ = name;
-			let flags = if cloexec { fcntl::OFlag::O_RDWR | fcntl::OFlag::O_CLOEXEC } else { fcntl::OFlag::O_RDWR };
+			let flags = if cloexec {
+				fcntl::OFlag::O_RDWR | fcntl::OFlag::O_CLOEXEC
+			} else {
+				fcntl::OFlag::O_RDWR
+			};
 			errno::Errno::result(unsafe {
 				libc::shm_open(libc::SHM_ANON, flags.bits(), stat::Mode::S_IRWXU.bits())
 			})
@@ -384,7 +388,6 @@ pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Resu
 			offset += n as u64;
 		}
 		Ok(())
-
 	}
 }
 
