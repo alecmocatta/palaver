@@ -3,7 +3,7 @@
 use super::*;
 #[cfg(unix)]
 use nix::{errno, libc};
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryInto;
 #[cfg(unix)]
 use std::mem;
 
