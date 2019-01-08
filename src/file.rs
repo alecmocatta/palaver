@@ -4,7 +4,7 @@ use super::*;
 use ext::ToHex;
 #[cfg(unix)]
 use nix::{errno, fcntl, sys::stat, unistd};
-use proc_self::fd_path;
+use proc::fd_path;
 use std::{
 	convert::TryInto, fs, io::{self, Read, Write}, mem, path
 };
@@ -337,14 +337,17 @@ pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Resu
 	#[cfg(any(target_os = "android", target_os = "linux"))]
 	{
 		use nix::sys::sendfile;
-		let mut offset = 0;
+		let mut offset: u64 = 0;
 		while offset != len {
-			offset += sendfile::sendfile(
+			let n = sendfile::sendfile(
 				out.as_raw_fd(),
 				in_.as_raw_fd(),
 				None,
 				(len - offset).try_into().unwrap(),
-			)? as u64;
+			)?;
+			let n: u64 = n.try_into().unwrap();
+			assert!(n <= len - offset);
+			offset += n;
 		}
 		Ok(())
 	}
@@ -377,15 +380,16 @@ pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Resu
 				in_.as_raw_fd(),
 				out.as_raw_fd(),
 				0,
-				Some((len - offset) as usize),
+				Some((len - offset).try_into().unwrap()),
 				None,
 				None,
 				sendfile::SfFlags::empty(),
 				0,
 			);
 			result?;
-			assert!(0 < n && n as u64 <= len - offset);
-			offset += n as u64;
+			let n: u64 = n.try_into().unwrap();
+			assert!(n <= len - offset);
+			offset += n;
 		}
 		Ok(())
 	}
@@ -396,14 +400,17 @@ pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Resu
 pub fn copy_splice<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Result<(), nix::Error> {
 	let mut offset = 0;
 	while offset != len {
-		offset += fcntl::splice(
+		let n = fcntl::splice(
 			in_.as_raw_fd(),
 			None,
 			out.as_raw_fd(),
 			None,
 			(len - offset).try_into().unwrap(),
 			fcntl::SpliceFFlags::empty(),
-		)? as u64;
+		)?;
+		let n: u64 = n.try_into().unwrap();
+		assert!(n <= len - offset);
+		offset += n;
 	}
 	Ok(())
 }

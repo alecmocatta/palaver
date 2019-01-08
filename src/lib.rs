@@ -2,7 +2,7 @@
 //!
 //! **[Crates.io](https://crates.io/crates/palaver) │ [Repo](https://github.com/alecmocatta/palaver)**
 //!
-//! This library attempts to provide reliable pollyfills for functionality that isn't implemented on all platforms, for example `gettid`, `memfd_create`, `fexecve`, `/proc/self`, as well as providing non-atomic versions of functions like `accept4`, `socket`+`SOCK_CLOEXEC`, `pipe2`, and other miscellanea like `seal` to make a file descriptor read-only thus suitable for `fexecve`.
+//! This library attempts to provide reliable polyfills for functionality that isn't implemented on all platforms, for example `gettid`, `memfd_create`, `fexecve`, `/proc/self`, as well as providing non-atomic versions of functions like `accept4`, `socket`+`SOCK_CLOEXEC`, `pipe2`, and other miscellanea like `seal` to make a file descriptor read-only thus suitable for `fexecve`.
 //!
 //! palaver = "Platform Abstraction Layer" / pa·lav·er *n.* – prolonged and tedious fuss.
 //!
@@ -26,7 +26,9 @@
 	clippy::doc_markdown,
 	clippy::if_not_else,
 	clippy::indexing_slicing,
-	clippy::shadow_unrelated
+	clippy::shadow_unrelated,
+	clippy::similar_names,
+	clippy::module_name_repetitions
 )]
 
 #[cfg(unix)]
@@ -42,7 +44,8 @@ extern crate mach;
 
 mod ext;
 pub mod file;
-pub mod proc_self;
+pub mod fork;
+pub mod proc;
 pub mod socket;
 pub mod thread;
 pub mod valgrind;

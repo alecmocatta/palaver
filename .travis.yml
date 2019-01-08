@@ -13,32 +13,28 @@ addons:
 
 env:
   global:
-    - FMT_VERSION=nightly-2019-01-03
-    - CLIPPY_VERSION=nightly-2019-01-03
-    - DOCS_RS_VERSION=nightly-2019-01-03
+    - RUST_LINT_VERSION=nightly-2019-01-03
 
 matrix:
   include:
     - os: linux
-      dist: precise
-      env: BUILD="" RUN="x86_64-unknown-linux-gnu i686-unknown-linux-gnu x86_64-unknown-linux-musl i686-unknown-linux-musl" RUSTFLAGS_VARIATIONS=";" DIST="precise" # ;-Cpanic=abort;-Clinker=gold
+      dist: precise # https://docs.travis-ci.com/user/reference/overview/
+      env: COMPILE="i686-unknown-freebsd x86_64-unknown-freebsd" BUILD="" RUN="x86_64-unknown-linux-gnu i686-unknown-linux-gnu x86_64-unknown-linux-musl i686-unknown-linux-musl" RUSTFLAGS_VARIATIONS=";" DIST="precise" # ;-Cpanic=abort;-Clinker=gold
     - os: linux
       dist: trusty
-      sudo: false
-      env: BUILD="" RUN="x86_64-unknown-linux-gnu i686-unknown-linux-gnu x86_64-unknown-linux-musl i686-unknown-linux-musl" RUSTFLAGS_VARIATIONS=";" DIST="trusty" # ;-Cpanic=abort;-Clinker=gold
+      env: COMPILE="i686-unknown-freebsd x86_64-unknown-freebsd" BUILD="" RUN="x86_64-unknown-linux-gnu i686-unknown-linux-gnu x86_64-unknown-linux-musl i686-unknown-linux-musl" RUSTFLAGS_VARIATIONS=";" DIST="trusty" # ;-Cpanic=abort;-Clinker=gold
     - os: linux
-      dist: trusty
-      sudo: required # https://docs.travis-ci.com/user/reference/overview/
-      env: BUILD="" RUN="x86_64-unknown-linux-gnu i686-unknown-linux-gnu x86_64-unknown-linux-musl i686-unknown-linux-musl" RUSTFLAGS_VARIATIONS=";" DIST="trusty" # ;-Cpanic=abort;-Clinker=gold
+      dist: xenial
+      env: COMPILE="i686-unknown-freebsd x86_64-unknown-freebsd" BUILD="" RUN="x86_64-unknown-linux-gnu i686-unknown-linux-gnu x86_64-unknown-linux-musl i686-unknown-linux-musl" RUSTFLAGS_VARIATIONS=";" DIST="trusty" # ;-Cpanic=abort;-Clinker=gold
     - os: osx
       osx_image: xcode6.4 # https://docs.travis-ci.com/user/reference/osx/
-      env: BUILD="x86_64-unknown-linux-musl i686-unknown-linux-musl" RUN="x86_64-apple-darwin i686-apple-darwin" RUSTFLAGS_VARIATIONS=";" # https://github.com/rust-lang/rust/pull/49219 ;-Cpanic=abort
+      env: COMPILE="" BUILD="x86_64-unknown-linux-musl i686-unknown-linux-musl" RUN="x86_64-apple-darwin i686-apple-darwin" RUSTFLAGS_VARIATIONS=";" # ;-Cpanic=abort
     - os: osx
       osx_image: xcode8.3
-      env: BUILD="x86_64-unknown-linux-musl i686-unknown-linux-musl" RUN="x86_64-apple-darwin i686-apple-darwin" RUSTFLAGS_VARIATIONS=";" # ;-Cpanic=abort
+      env: COMPILE="" BUILD="x86_64-unknown-linux-musl i686-unknown-linux-musl" RUN="x86_64-apple-darwin i686-apple-darwin" RUSTFLAGS_VARIATIONS=";" # ;-Cpanic=abort
     - os: osx
       osx_image: xcode9.4
-      env: BUILD="x86_64-unknown-linux-musl i686-unknown-linux-musl" RUN="x86_64-apple-darwin i686-apple-darwin" RUSTFLAGS_VARIATIONS=";" # ;-Cpanic=abort
+      env: COMPILE="" BUILD="x86_64-unknown-linux-musl i686-unknown-linux-musl" RUN="x86_64-apple-darwin i686-apple-darwin" RUSTFLAGS_VARIATIONS=";" # ;-Cpanic=abort
 
 before_script: |
   ( set -o errexit;set -o pipefail; set -o xtrace;set -o nounset;
@@ -48,20 +44,20 @@ before_script: |
       sudo -E apt-get update
       sudo -E apt-get -yq --no-install-suggests --no-install-recommends $(travis_apt_get_options) install libstdc++6-4.7-dev
     fi
-    for TARGET in $BUILD $RUN; do [ "$TARGET" = $(rustup target list | grep default | grep -o -e '^[^ ]\+') ] || travis_retry rustup target add "$TARGET"; done
-    travis_retry rustup toolchain add $FMT_VERSION
-    travis_retry rustup toolchain add $CLIPPY_VERSION
-    travis_retry rustup component add rustfmt-preview --toolchain $FMT_VERSION
-    travis_retry rustup component add clippy-preview --toolchain $CLIPPY_VERSION
-    travis_retry rustup toolchain add $DOCS_RS_VERSION
-    for TARGET in $BUILD $RUN; do [ "$TARGET" = $(rustup target list | grep default | grep -o -e '^[^ ]\+') ] || travis_retry rustup target add --toolchain $DOCS_RS_VERSION "$TARGET"; done
+    for TARGET in $COMPILE $BUILD $RUN; do [ "$TARGET" = $(rustup target list | grep default | grep -o -e '^[^ ]\+') ] || travis_retry rustup target add "$TARGET"; done
+    travis_retry rustup toolchain add $RUST_LINT_VERSION
+    travis_retry rustup component add rustfmt --toolchain $RUST_LINT_VERSION
+    travis_retry rustup component add clippy --toolchain $RUST_LINT_VERSION
+    for TARGET in $COMPILE $BUILD $RUN; do [ "$TARGET" = $(rustup target list | grep default | grep -o -e '^[^ ]\+') ] || travis_retry rustup target add --toolchain $RUST_LINT_VERSION "$TARGET"; done
   )
 script: |
   ( set -o errexit;set -o pipefail; set -o xtrace;set -o nounset;
-    cargo +$FMT_VERSION fmt -- --check
-    RUSTFLAGS="-C target-cpu=native" cargo +$CLIPPY_VERSION clippy --all-targets --all-features -- -D warnings
+    cargo +$RUST_LINT_VERSION fmt -- --check
     OLD_IFS=$IFS IFS=";"; for RUSTFLAGS in $RUSTFLAGS_VARIATIONS; do ( IFS=$OLD_IFS
       export RUSTFLAGS
+      for TARGET in $COMPILE $BUILD $RUN; do (
+        cargo +$RUST_LINT_VERSION clippy --target "$TARGET" --all-targets --all-features -- -D warnings
+      ); done
       for TARGET in $BUILD $RUN; do (
         [ \( "$TRAVIS_OS_NAME" = "osx" -o \( "$TRAVIS_OS_NAME" = "linux" -a "${DIST-}" = "precise" \) \) -a \( "$TARGET" = "x86_64-unknown-linux-musl" -o "$TARGET" = "i686-unknown-linux-musl" \) ] && RUSTFLAGS="$RUSTFLAGS -C linker=rust-lld -C linker-flavor=ld.lld"
         cargo build --verbose --target "$TARGET" --all-targets --all-features
@@ -78,8 +74,8 @@ script: |
         ); done
       ); done
     ); done; IFS=$OLD_IFS
-    for TARGET in $BUILD $RUN; do
-      cargo +$DOCS_RS_VERSION doc --no-deps --target "$TARGET" --all-features --release &>/dev/null
+    for TARGET in $COMPILE $BUILD $RUN; do
+      cargo +$RUST_LINT_VERSION doc --no-deps --target "$TARGET" --all-features --release &>/dev/null
     done
   )
 

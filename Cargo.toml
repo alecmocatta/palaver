@@ -8,7 +8,7 @@ keywords = ["polyfill","pal","platform-abstraction"]
 description = """
 Cross-platform polyfills.
 
-This library attempts to provide reliable pollyfills for functionality that isn't implemented on all platforms, for example `gettid`, `memfd_create`, `fexecve`, as well as providing non-atomic versions of functions like `accept4`, `socket`+`SOCK_CLOEXEC`, `pipe2`, an other miscellanea like `seal` to make a file descriptor read-only thus suitable for `fexecve`.
+This library attempts to provide reliable polyfills for functionality that isn't implemented on all platforms, for example `gettid`, `memfd_create`, `fexecve`, `/proc/self`, as well as providing non-atomic versions of functions like `accept4`, `socket`+`SOCK_CLOEXEC`, `pipe2`, an other miscellanea like `seal` to make a file descriptor read-only thus suitable for `fexecve`.
 """
 repository = "https://github.com/alecmocatta/palaver"
 homepage = "https://github.com/alecmocatta/palaver"
@@ -27,7 +27,7 @@ maintenance = { status = "actively-developed" }
 valgrind_request = "1.1"
 void = "1.0"
 bitflags = "1.0"
-libc = "0.2.43"
+libc = "=0.2.46"
 
 [target.'cfg(unix)'.dependencies]
 nix = "0.11"
@@ -40,6 +40,9 @@ mach = "0.2"
 
 [target.'cfg(any(target_os = "android", target_os = "linux"))'.dependencies]
 procinfo = "0.4"
+
+[replace]
+"libc:0.2.46" = {git = "https://github.com/alecmocatta/libc"}
 
 [[test]]
 name = "test"

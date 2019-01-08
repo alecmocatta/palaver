@@ -4,12 +4,12 @@
 //!
 //! # Examples
 //!
-//! ```rust,ignore
+//! ```
 //! extern crate nix;
-//! extern crate proc_self;
+//! extern crate palaver;
 //!
 //! use std::io::Read;
-//! use proc_self::*;
+//! use palaver::proc::*;
 //!
 //! # fn main() {
 //! // Close all file descriptors except std{in,out,err}.
