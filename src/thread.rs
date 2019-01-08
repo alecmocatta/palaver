@@ -1,6 +1,8 @@
+//! Thread-related functionality
+
 #[cfg(unix)]
 use nix::libc;
-use std::{sync, thread};
+use std::convert::TryInto;
 
 /// Get an identifier for the thread; uses gettid on linux; pthread_threadid_np on mac; GetCurrentThreadId on windows.
 #[inline]
@@ -8,7 +10,9 @@ pub fn gettid() -> u64 {
 	#[cfg(any(target_os = "android", target_os = "linux"))]
 	{
 		use nix::unistd;
-		Into::<libc::pid_t>::into(unistd::gettid()) as u64
+		Into::<libc::pid_t>::into(unistd::gettid())
+			.try_into()
+			.unwrap()
 	}
 	#[cfg(any(target_os = "macos", target_os = "ios"))]
 	{
@@ -35,31 +39,53 @@ pub fn gettid() -> u64 {
 	}
 }
 
-/// A wrapper around `std::thread::spawn()` that blocks until the new thread has left library code. Library code can do things like temporarily opening fds (leading to dup2 on other threads returning EBUSY on Linux), so blocking this thread until it's done just makes things more predictable.
-pub fn spawn<F, T>(name: String, f: F) -> thread::JoinHandle<T>
-where
-	F: FnOnce() -> T,
-	F: Send + 'static,
-	T: Send + 'static,
-{
-	// #[cfg(any(target_os = "macos", target_os = "ios"))]
-	// {
-	let (sender, receiver) = sync::mpsc::channel::<()>();
-	let ret = thread::Builder::new()
-		.name(name)
-		.spawn(move || {
-			drop(sender);
-			f()
-		})
-		.unwrap();
-	if let Err(sync::mpsc::RecvError) = receiver.recv() {
-	} else {
-		unreachable!()
+/// Count the number of threads of the current process. Uses [`/proc/self/stat`](http://man7.org/linux/man-pages/man5/proc.5.html):`num_threads` on Linux, [`task_threads`](http://web.mit.edu/darwin/src/modules/xnu/osfmk/man/task_threads.html) on macOS.
+pub fn count() -> usize {
+	#[cfg(any(target_os = "android", target_os = "linux"))]
+	{
+		procinfo::pid::stat_self()
+			.unwrap()
+			.num_threads
+			.try_into()
+			.unwrap()
 	}
-	ret
-	// }
-	// #[cfg(not(any(target_os = "macos", target_os = "ios")))]
-	// {
-	// 	thread::Builder::new().name(name).spawn(f).unwrap()
-	// }
+	#[cfg(any(target_os = "macos", target_os = "ios"))]
+	{
+		use mach::{
+			kern_return::{kern_return_t, KERN_SUCCESS}, mach_types::thread_act_array_t, message::mach_msg_type_number_t, task::task_threads, traps::mach_task_self, vm_types::{vm_address_t, vm_map_t, vm_size_t}
+		};
+		use std::{mem, ptr};
+		extern "C" {
+			pub fn vm_deallocate(
+				target_task: vm_map_t, address: vm_address_t, size: vm_size_t,
+			) -> kern_return_t;
+		}
+
+		let this_task = unsafe { mach_task_self() };
+
+		let mut thread_list: thread_act_array_t = ptr::null_mut();
+		let mut thread_count: mach_msg_type_number_t = 0;
+		let kret = unsafe { task_threads(this_task, &mut thread_list, &mut thread_count) };
+		assert_eq!(kret, KERN_SUCCESS);
+		let thread_count: usize = thread_count.try_into().unwrap();
+
+		for i in 0..thread_count {
+			let kret = unsafe {
+				mach::mach_port::mach_port_deallocate(
+					this_task,
+					*thread_list.offset(i.try_into().unwrap()),
+				)
+			};
+			assert_eq!(kret, KERN_SUCCESS);
+		}
+		let kret = unsafe {
+			vm_deallocate(
+				this_task,
+				thread_list as usize,
+				mem::size_of_val(&*thread_list) * thread_count,
+			)
+		};
+		assert_eq!(kret, KERN_SUCCESS);
+		thread_count
+	}
 }

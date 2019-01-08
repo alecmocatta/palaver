@@ -9,7 +9,7 @@
 
 Cross-platform polyfills.
 
-This library attempts to provide reliable pollyfills for functionality that isn't implemented on all platforms, for example `gettid`, `memfd_create`, `fexecve`, as well as providing non-atomic versions of functions like `accept4`, `socket`+`SOCK_CLOEXEC`, `pipe2`, and other miscellanea like `seal` to make a file descriptor read-only thus suitable for `fexecve`.
+This library attempts to provide reliable pollyfills for functionality that isn't implemented on all platforms, for example `gettid`, `memfd_create`, `fexecve`, `/proc/self`, as well as providing non-atomic versions of functions like `accept4`, `socket`+`SOCK_CLOEXEC`, `pipe2`, and other miscellanea like `seal` to make a file descriptor read-only thus suitable for `fexecve`.
 
 palaver = "Platform Abstraction Layer" / pa·lav·er *n.* – prolonged and tedious fuss.
 
