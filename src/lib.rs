@@ -8,7 +8,7 @@
 //!
 //! It's currently used on unix-family systems; most Windows functionality is TODO.
 
-#![feature(try_from)]
+#![feature(try_from, uniform_paths)]
 #![doc(html_root_url = "https://docs.rs/palaver/0.1.0")]
 #![warn(
 	missing_copy_implementations,
@@ -31,19 +31,9 @@
 	clippy::module_name_repetitions
 )]
 
-#[cfg(unix)]
-extern crate nix;
-extern crate valgrind_request;
-extern crate void;
-#[cfg(windows)]
-extern crate winapi;
-#[macro_use]
-extern crate bitflags;
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-extern crate mach;
-
 mod ext;
 pub mod file;
+#[cfg(unix)]
 pub mod fork;
 pub mod proc;
 pub mod socket;

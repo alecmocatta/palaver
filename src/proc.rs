@@ -26,10 +26,11 @@
 //! ```
 
 use super::*;
-#[cfg(target_family = "unix")]
+#[cfg(unix)]
 use nix::libc;
+#[cfg(unix)]
 use std::ffi::OsString;
-#[cfg(target_family = "unix")]
+#[cfg(unix)]
 use std::{
 	ffi::{CStr, CString}, os::unix::ffi::OsStringExt
 };
@@ -118,6 +119,7 @@ pub fn fd_path(fd: Fd) -> io::Result<path::PathBuf> {
 		target_os = "ios"
 	)))]
 	{
+		let _ = fd;
 		Err(io::Error::new(
 			io::ErrorKind::NotFound,
 			"no known /proc/self/fd equivalent for OS",
@@ -128,12 +130,12 @@ pub fn fd_path(fd: Fd) -> io::Result<path::PathBuf> {
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Iterator for all open file descriptors. Doesn't work on Windows.
-pub struct FdIter(#[cfg(target_family = "unix")] *mut libc::DIR);
+pub struct FdIter(#[cfg(unix)] *mut libc::DIR);
 impl FdIter {
 	/// Create a new FdIter. Returns Err on OSs that don't support this.
 	pub fn new() -> Result<Self, io::Error> {
 		let dir = fd_dir()?;
-		#[cfg(target_family = "unix")]
+		#[cfg(unix)]
 		{
 			let dir =
 				CString::new(<path::PathBuf as Into<OsString>>::into(dir).into_vec()).unwrap();
@@ -141,8 +143,9 @@ impl FdIter {
 			assert!(!dirp.is_null());
 			Ok(Self(dirp))
 		}
-		#[cfg(target_family = "windows")]
+		#[cfg(windows)]
 		{
+			let _ = dir;
 			Err(io::Error::new(
 				io::ErrorKind::NotFound,
 				"can't iterate dir?",
@@ -155,7 +158,7 @@ impl Iterator for FdIter {
 	type Item = Fd;
 
 	fn next(&mut self) -> Option<Self::Item> {
-		#[cfg(target_family = "unix")]
+		#[cfg(unix)]
 		{
 			let mut dent;
 			while {
@@ -180,7 +183,7 @@ impl Iterator for FdIter {
 			}
 			None
 		}
-		#[cfg(target_family = "windows")]
+		#[cfg(windows)]
 		{
 			unreachable!()
 		}
@@ -193,7 +196,7 @@ impl fmt::Debug for FdIter {
 }
 impl Drop for FdIter {
 	fn drop(&mut self) {
-		#[cfg(target_family = "unix")]
+		#[cfg(unix)]
 		{
 			let ret = unsafe { libc::closedir(self.0) };
 			assert_eq!(ret, 0);

@@ -12,9 +12,11 @@ use nix::libc;
 use std::convert::TryInto;
 
 /// Get an identifier for the thread;
+///
 /// - uses gettid on Linux;
 /// - pthread_threadid_np on macOS;
 /// - pthread_getthreadid_np on FreeBSD;
+/// - _lwp_self on NetBSD;
 /// - GetCurrentThreadId on windows.
 #[inline]
 pub fn gettid() -> u64 {
@@ -29,13 +31,13 @@ pub fn gettid() -> u64 {
 	{
 		use std::mem;
 		// https://github.com/google/xi-editor/blob/346bfe2d96f412cca5c8aa858287730f5ed521c3/rust/trace/src/sys_tid.rs
+		// or mach_thread_self ?
 		#[link(name = "pthread")]
 		extern "C" {
 			fn pthread_threadid_np(
 				thread: libc::pthread_t, thread_id: *mut libc::uint64_t,
 			) -> libc::c_int;
 		}
-
 		let mut tid: libc::uint64_t = unsafe { mem::uninitialized() };
 		let err = unsafe { pthread_threadid_np(0, &mut tid) };
 		assert_eq!(err, 0);
@@ -43,19 +45,23 @@ pub fn gettid() -> u64 {
 	}
 	#[cfg(target_os = "freebsd")]
 	{
+		// or thr_self ?
 		#[link(name = "pthread")]
 		extern "C" {
 			fn pthread_getthreadid_np() -> libc::c_int;
 		}
 		(unsafe { pthread_getthreadid_np() }).try_into().unwrap()
 	}
-
-	#[cfg(windows)]
+	#[cfg(target_os = "netbsd")]
 	{
 		extern "C" {
-			fn GetCurrentThreadId() -> libc::c_ulong;
+			fn _lwp_self() -> libc::c_uint;
 		}
-		(unsafe { GetCurrentThreadId() }).into()
+		(unsafe { _lwp_self() }).into()
+	}
+	#[cfg(windows)]
+	{
+		(unsafe { winapi::um::processthreadsapi::GetCurrentThreadId() }).into()
 	}
 }
 

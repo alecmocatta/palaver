@@ -1,19 +1,27 @@
 //! File and file descriptor-related functionality
 
+#[cfg(unix)]
 use super::*;
+#[cfg(unix)]
 use ext::ToHex;
 #[cfg(unix)]
 use nix::{errno, fcntl, sys::stat, unistd};
-use proc::fd_path;
-use std::{
-	convert::TryInto, fs, io::{self, Read, Write}, mem, path
-};
 #[cfg(unix)]
-use std::{
-	ffi::{CStr, CString}, os::unix::io::AsRawFd
-};
+use proc::fd_path;
+#[cfg(any(
+	target_os = "linux",
+	target_os = "android",
+	target_os = "macos",
+	target_os = "ios",
+	target_os = "freebsd"
+))]
+use std::convert::TryInto;
+use std::io::{self, Read, Write};
+#[cfg(unix)]
+use std::{ffi::CStr, ffi::CString, fs, mem, os::unix::io::AsRawFd, path};
 
 /// Maps file descriptors [(from,to)]
+#[cfg(unix)]
 pub fn move_fds(fds: &mut [(Fd, Fd)]) {
 	loop {
 		#[allow(clippy::never_loop)]
@@ -51,6 +59,7 @@ pub fn move_fds(fds: &mut [(Fd, Fd)]) {
 }
 
 /// Makes a file descriptor read-only, which seems neccessary on some platforms to pass to fexecve and is good practise anyway
+#[cfg(unix)]
 pub fn seal(fd: Fd) {
 	let fd2 = fcntl::open(
 		&fd_path(fd).unwrap(),
@@ -75,6 +84,7 @@ pub fn seal(fd: Fd) {
 }
 
 /// Like dup except O_CLOEXEC can be passed atomically
+#[cfg(unix)]
 pub fn dup(oldfd: Fd, flags: fcntl::OFlag) -> Result<Fd, nix::Error> {
 	fcntl::fcntl(
 		oldfd,
@@ -90,6 +100,7 @@ pub fn dup(oldfd: Fd, flags: fcntl::OFlag) -> Result<Fd, nix::Error> {
 	})
 }
 /// Like dup2/3; automatically retries on EBUSY on Linux
+#[cfg(unix)]
 pub fn dup_to(oldfd: Fd, newfd: Fd, flags: fcntl::OFlag) -> Result<(), nix::Error> {
 	assert_ne!(oldfd, newfd);
 	#[cfg_attr(
@@ -107,6 +118,7 @@ pub fn dup_to(oldfd: Fd, newfd: Fd, flags: fcntl::OFlag) -> Result<(), nix::Erro
 }
 
 /// Like pipe2; not atomic on platforms that lack it
+#[cfg(unix)]
 pub fn pipe(flags: fcntl::OFlag) -> Result<(Fd, Fd), nix::Error> {
 	#[cfg(any(
 		target_os = "android",
@@ -154,6 +166,7 @@ pub fn pipe(flags: fcntl::OFlag) -> Result<(Fd, Fd), nix::Error> {
 }
 
 /// Falls back to shm_open, falls back to creating+unlinking /tmp/{random_filename}
+#[cfg(unix)]
 pub fn memfd_create(name: &CStr, cloexec: bool) -> Result<Fd, nix::Error> {
 	let ret = {
 		#[cfg(any(target_os = "android", target_os = "linux"))]
@@ -162,7 +175,6 @@ pub fn memfd_create(name: &CStr, cloexec: bool) -> Result<Fd, nix::Error> {
 			let mut flags = memfd::MemFdCreateFlag::empty();
 			flags.set(memfd::MemFdCreateFlag::MFD_CLOEXEC, cloexec);
 			memfd::memfd_create(name, flags)
-			// Err(nix::Error::Sys(errno::Errno::ENOSYS)) => None,
 		}
 		#[cfg(target_os = "freebsd")]
 		{
@@ -182,7 +194,7 @@ pub fn memfd_create(name: &CStr, cloexec: bool) -> Result<Fd, nix::Error> {
 			Err(nix::Error::Sys(errno::Errno::ENOSYS))
 		}
 	};
-	#[cfg(not(any(target_os = "ios", target_os = "macos")))] // can't read/write on mac
+	#[cfg(all(unix, not(any(target_os = "ios", target_os = "macos"))))] // can't read/write on mac
 	let ret = ret.or_else(|_e| {
 		use nix::sys::mman;
 		let mut random: [u8; 16] = unsafe { mem::uninitialized() }; // ENAMETOOLONG on mac for 16
@@ -208,29 +220,41 @@ pub fn memfd_create(name: &CStr, cloexec: bool) -> Result<Fd, nix::Error> {
 			fd
 		})
 	});
-	ret.or_else(|_e| {
-		let mut random: [u8; 16] = unsafe { mem::uninitialized() };
-		// thread_rng uses getrandom(2) on >=3.17 (same as memfd_create), permanently opens /dev/urandom on fail, which messes our fd numbers. TODO: less assumptive about fd numbers..
-		let rand = fs::File::open("/dev/urandom").expect("Couldn't open /dev/urandom");
-		(&rand).read_exact(&mut random).unwrap();
-		drop(rand);
-		let name = path::PathBuf::from(format!("/tmp/{}_XXXXXX", random.to_hex()));
-		unistd::mkstemp(&name).map(|(fd, path)| {
-			unistd::unlink(path.as_path()).unwrap();
-			stat::fchmod(fd, stat::Mode::S_IRWXU).unwrap();
-			if cloexec {
-				let mut flags_ =
-					fcntl::FdFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap())
-						.unwrap();
-				flags_.insert(fcntl::FdFlag::FD_CLOEXEC);
-				let _ = fcntl::fcntl(fd, fcntl::FcntlArg::F_SETFD(flags_)).unwrap();
-			}
-			fd
+	#[cfg(unix)]
+	{
+		ret.or_else(|_e| {
+			let mut random: [u8; 16] = unsafe { mem::uninitialized() };
+			// thread_rng uses getrandom(2) on >=3.17 (same as memfd_create), permanently opens /dev/urandom on fail, which messes our fd numbers. TODO: less assumptive about fd numbers..
+			let rand = fs::File::open("/dev/urandom").expect("Couldn't open /dev/urandom");
+			(&rand).read_exact(&mut random).unwrap();
+			drop(rand);
+			let name = path::PathBuf::from(format!("/tmp/{}_XXXXXX", random.to_hex()));
+			unistd::mkstemp(&name).map(|(fd, path)| {
+				unistd::unlink(path.as_path()).unwrap();
+				stat::fchmod(fd, stat::Mode::S_IRWXU).unwrap();
+				if cloexec {
+					let mut flags_ = fcntl::FdFlag::from_bits(
+						fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap(),
+					)
+					.unwrap();
+					flags_.insert(fcntl::FdFlag::FD_CLOEXEC);
+					let _ = fcntl::fcntl(fd, fcntl::FcntlArg::F_SETFD(flags_)).unwrap();
+				}
+				fd
+			})
 		})
-	})
+	}
+	#[cfg(windows)]
+	{
+		ret.or_else(|_e| {
+			unimplemented!()
+			// Ok(unsafe { libc::tmpfile() })
+		})
+	}
 }
 
 /// Falls back to execve("/proc/self/fd/{fd}",...), falls back to execve("/tmp/{randomfilename}")
+#[cfg(unix)]
 pub fn fexecve(fd: Fd, arg: &[CString], env: &[CString]) -> Result<void::Void, nix::Error> {
 	#[cfg(any(
 		target_os = "android",
@@ -242,13 +266,16 @@ pub fn fexecve(fd: Fd, arg: &[CString], env: &[CString]) -> Result<void::Void, n
 	{
 		unistd::fexecve(fd, arg, env)
 	}
-	#[cfg(not(any(
-		target_os = "android",
-		target_os = "freebsd",
-		target_os = "linux",
-		target_os = "netbsd",
-		target_os = "openbsd"
-	)))]
+	#[cfg(all(
+		unix,
+		not(any(
+			target_os = "android",
+			target_os = "freebsd",
+			target_os = "linux",
+			target_os = "netbsd",
+			target_os = "openbsd"
+		))
+	))]
 	{
 		use std::{
 			ffi::OsString, os::unix::{ffi::OsStringExt, io::FromRawFd}, process
@@ -270,7 +297,6 @@ pub fn fexecve(fd: Fd, arg: &[CString], env: &[CString]) -> Result<void::Void, n
 			let name = path::PathBuf::from(format!("/tmp/{}_XXXXXX", random.to_hex()));
 			let (to, to_path) = unistd::mkstemp(&name)
 				.map(|(fd, path)| {
-					// unistd::unlink(path.as_path()).unwrap();
 					stat::fchmod(fd, stat::Mode::S_IRWXU).unwrap();
 					if true {
 						// cloexec
@@ -294,13 +320,15 @@ pub fn fexecve(fd: Fd, arg: &[CString], env: &[CString]) -> Result<void::Void, n
 			if let unistd::ForkResult::Parent { .. } = unistd::fork().expect("Fork failed") {
 				unistd::close(read).unwrap();
 				unistd::execve(
-					&CString::new(<OsString as OsStringExt>::into_vec(to_path.into())).unwrap(),
+					&CString::new(<OsString as OsStringExt>::into_vec(to_path.clone().into()))
+						.unwrap(),
 					arg,
 					env,
 				)
 				.map_err(|e| {
 					let _ = unistd::write(write, &[0]).unwrap();
 					unistd::close(write).unwrap();
+					unistd::unlink(to_path.as_path()).unwrap();
 					e
 				})
 			} else {
@@ -316,6 +344,10 @@ pub fn fexecve(fd: Fd, arg: &[CString], env: &[CString]) -> Result<void::Void, n
 				}
 			}
 		})
+	}
+	#[cfg(windows)]
+	{
+		Err(unimplemented!())
 	}
 }
 
@@ -333,6 +365,7 @@ where
 }
 
 /// Loops sendfile till len elapsed or error
+#[cfg(unix)]
 pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Result<(), nix::Error> {
 	#[cfg(any(target_os = "android", target_os = "linux"))]
 	{
@@ -392,6 +425,19 @@ pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Resu
 			offset += n;
 		}
 		Ok(())
+	}
+	#[cfg(not(any(
+		target_os = "android",
+		target_os = "linux",
+		target_os = "ios",
+		target_os = "macos",
+		target_os = "freebsd"
+	)))]
+	{
+		let _ = (in_, out, len);
+		// void *addr = mmap(NULL, length, PROT_READ, MAP_FILE | MAP_SHARED, file descriptor, offset);
+		// send(socket, addr, length, 0);
+		unimplemented!()
 	}
 }
 

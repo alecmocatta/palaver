@@ -26,6 +26,7 @@
 
 #[cfg(target_os = "freebsd")]
 use super::Fd;
+use nix::libc;
 
 /// Child process handle
 #[allow(missing_copy_implementations)]
@@ -40,6 +41,7 @@ pub struct ChildHandle {
 
 impl ChildHandle {
 	/// Signal the child process
+	#[cfg(unix)]
 	pub fn signal(&self, sig: libc::c_int) -> bool {
 		#[cfg(target_os = "freebsd")]
 		unsafe {
@@ -71,6 +73,7 @@ pub enum ForkResult {
 }
 
 /// Fork
+#[cfg(unix)]
 pub fn fork() -> Result<ForkResult, ()> {
 	#[cfg(target_os = "freebsd")]
 	{

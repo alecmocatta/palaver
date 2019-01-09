@@ -1,11 +1,14 @@
 //! Socket-related functionality
 
+#[cfg(unix)]
 use super::*;
 #[cfg(unix)]
 use nix::{libc, poll, sys::socket};
+#[cfg(unix)]
 use std::convert::TryInto;
 
-bitflags! {
+#[cfg(unix)]
+bitflags::bitflags! {
 	/// Akin to nix::sys::socket::SockFlag but avail cross-platform
 	pub struct SockFlag: libc::c_int {
 		#[allow(missing_docs)]
@@ -15,6 +18,7 @@ bitflags! {
 	}
 }
 /// Falls back to non-atomic if SOCK_NONBLOCK/SOCK_CLOEXEC unavailable
+#[cfg(unix)]
 pub fn socket<T: Into<Option<socket::SockProtocol>>>(
 	domain: socket::AddressFamily, ty: socket::SockType, flags: SockFlag, protocol: T,
 ) -> Result<Fd, nix::Error> {
@@ -70,6 +74,7 @@ pub fn socket<T: Into<Option<socket::SockProtocol>>>(
 	})
 }
 /// Like accept4, falls back to non-atomic accept
+#[cfg(unix)]
 pub fn accept(sockfd: Fd, flags: SockFlag) -> Result<Fd, nix::Error> {
 	#[cfg(any(
 		target_os = "android",
@@ -121,6 +126,7 @@ pub fn accept(sockfd: Fd, flags: SockFlag) -> Result<Fd, nix::Error> {
 /// Intended to check for completion after `connect(2)` has returned `EINPROGRESS`.
 ///
 /// Note: Must be called before any data has been written to this `fd`.
+#[cfg(unix)]
 pub fn is_connected(fd: Fd) -> bool {
 	let mut events = [poll::PollFd::new(fd, poll::EventFlags::POLLOUT)];
 	let n = poll::poll(&mut events, 0).unwrap();
@@ -129,6 +135,7 @@ pub fn is_connected(fd: Fd) -> bool {
 }
 
 /// Count of bytes that have yet to be read from a socket
+#[cfg(unix)]
 pub fn unreceived(fd: Fd) -> usize {
 	let mut available: libc::c_int = 0;
 	let err = unsafe { libc::ioctl(fd, libc::FIONREAD, &mut available) };
@@ -136,6 +143,7 @@ pub fn unreceived(fd: Fd) -> usize {
 	available.try_into().unwrap()
 }
 /// Count of bytes that have been written to a socket, but have yet to be acked by the remote end. Works on Android, Linux, macOS, iOS, FreeBSD and NetBSD, returns 0 on others.
+#[cfg(unix)]
 pub fn unsent(fd: Fd) -> usize {
 	let mut unsent: libc::c_int = 0;
 	#[cfg(any(target_os = "android", target_os = "linux"))]
