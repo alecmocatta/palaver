@@ -22,7 +22,7 @@ use std::{ffi::CStr, ffi::CString, fs, mem, os::unix::io::AsRawFd, path};
 
 /// Maps file descriptors [(from,to)]
 #[cfg(unix)]
-pub fn move_fds(fds: &mut [(Fd, Fd)]) {
+pub fn move_fds(fds: &mut [(Fd, Fd)], flags: Option<fcntl::FdFlag>, allow_nonexistent: bool) {
 	loop {
 		#[allow(clippy::never_loop)]
 		let i = 'a: loop {
@@ -35,60 +35,46 @@ pub fn move_fds(fds: &mut [(Fd, Fd)]) {
 				}
 			}
 			for &mut (from, to) in fds {
-				assert_eq!(from, to); // this assertion checks we aren't looping eternally due to a ring (todo: use self::dup for temp fd)
+				assert_eq!(from, to); // this assertion checks we aren't looping eternally due to a ring; TODO: use self::dup for temp fd
 			}
 			return;
 		};
 		let (from, to) = fds[i];
-		let flags = fcntl::FdFlag::from_bits(fcntl::fcntl(from, fcntl::FcntlArg::F_GETFD).unwrap())
-			.unwrap();
-		dup_to(
-			from,
-			to,
-			if flags.contains(fcntl::FdFlag::FD_CLOEXEC) {
-				fcntl::OFlag::O_CLOEXEC
-			} else {
-				fcntl::OFlag::empty()
-			},
-		)
-		.unwrap();
-		let _ = fcntl::fcntl(to, fcntl::FcntlArg::F_SETFD(flags)).unwrap();
-		unistd::close(from).unwrap();
+		move_fd(from, to, flags, allow_nonexistent).unwrap();
 		fds[i].0 = to;
 	}
 }
 
-/// Makes a file descriptor read-only, which seems neccessary on some platforms to pass to fexecve and is good practise anyway
+/// Makes a file descriptor read-only, which seems neccessary on some platforms to pass to fexecve and is good practise anyway.
 #[cfg(unix)]
-pub fn seal(fd: Fd) {
+pub fn seal_fd(fd: Fd) {
 	let fd2 = fcntl::open(
 		&fd_path(fd).unwrap(),
 		fcntl::OFlag::O_RDONLY,
 		stat::Mode::empty(),
 	)
 	.unwrap();
-	let flags =
+	let fd_flags =
 		fcntl::FdFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap()).unwrap();
+	let fl_flags = fcntl::OFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFL).unwrap())
+		.unwrap()
+		& !(fcntl::OFlag::O_WRONLY | fcntl::OFlag::O_RDWR)
+		| fcntl::OFlag::O_RDONLY;
 	unistd::close(fd).unwrap();
-	dup_to(
-		fd2,
-		fd,
-		if flags.contains(fcntl::FdFlag::FD_CLOEXEC) {
-			fcntl::OFlag::O_CLOEXEC
-		} else {
-			fcntl::OFlag::empty()
-		},
-	)
-	.unwrap();
-	unistd::close(fd2).unwrap();
+	let err = fcntl::fcntl(fd2, fcntl::FcntlArg::F_SETFL(fl_flags)).unwrap();
+	assert_eq!(err, 0);
+	move_fd(fd2, fd, Some(fd_flags), false).unwrap();
 }
 
-/// Like dup except O_CLOEXEC can be passed atomically
+/// Duplicate a file descriptor. Flags are passed atomically. `flags` being `None` copies the flags from `oldfd`.
 #[cfg(unix)]
-pub fn dup(oldfd: Fd, flags: fcntl::OFlag) -> Result<Fd, nix::Error> {
+pub fn dup_fd(oldfd: Fd, flags: Option<fcntl::FdFlag>) -> Result<Fd, nix::Error> {
+	let flags = flags.unwrap_or_else(|| {
+		fcntl::FdFlag::from_bits(fcntl::fcntl(oldfd, fcntl::FcntlArg::F_GETFD).unwrap()).unwrap()
+	});
 	fcntl::fcntl(
 		oldfd,
-		if flags.contains(fcntl::OFlag::O_CLOEXEC) {
+		if flags.contains(fcntl::FdFlag::FD_CLOEXEC) {
 			fcntl::FcntlArg::F_DUPFD_CLOEXEC(oldfd)
 		} else {
 			fcntl::FcntlArg::F_DUPFD(oldfd)
@@ -99,10 +85,34 @@ pub fn dup(oldfd: Fd, flags: fcntl::OFlag) -> Result<Fd, nix::Error> {
 		newfd
 	})
 }
-/// Like dup2/3; automatically retries on EBUSY on Linux
+
+/// Move a file descriptor. Flags are passed atomically. `flags` being `None` copies the flags from `oldfd`. Panics if `newfd` doesn't exist and `allow_nonexistent` isn't set; this can help debug the race of another thread creating `newfd` and having it deleted from under it by us.
 #[cfg(unix)]
-pub fn dup_to(oldfd: Fd, newfd: Fd, flags: fcntl::OFlag) -> Result<(), nix::Error> {
-	assert_ne!(oldfd, newfd);
+pub fn move_fd(
+	oldfd: Fd, newfd: Fd, flags: Option<fcntl::FdFlag>, allow_nonexistent: bool,
+) -> Result<(), nix::Error> {
+	copy_fd(oldfd, newfd, flags, allow_nonexistent).and_then(|()| unistd::close(oldfd))
+}
+
+/// Copy a file descriptor. Flags are passed atomically. `flags` being `None` copies the flags from `oldfd`. Panics if `newfd` doesn't exist and `allow_nonexistent` isn't set; this can help debug the race of another thread creating `newfd` and having it deleted from under it by us.
+#[cfg(unix)]
+pub fn copy_fd(
+	oldfd: Fd, newfd: Fd, flags: Option<fcntl::FdFlag>, allow_nonexistent: bool,
+) -> Result<(), nix::Error> {
+	if !allow_nonexistent {
+		let _ = fcntl::fcntl(newfd, fcntl::FcntlArg::F_GETFD).unwrap();
+	}
+	if oldfd == newfd {
+		return Err(nix::Error::Sys(errno::Errno::EINVAL));
+	}
+	let flags = flags.unwrap_or_else(|| {
+		fcntl::FdFlag::from_bits(fcntl::fcntl(oldfd, fcntl::FcntlArg::F_GETFD).unwrap()).unwrap()
+	});
+	let flags = if flags.contains(fcntl::FdFlag::FD_CLOEXEC) {
+		fcntl::OFlag::O_CLOEXEC
+	} else {
+		fcntl::OFlag::empty()
+	};
 	#[cfg_attr(
 		not(any(target_os = "android", target_os = "linux")),
 		allow(clippy::never_loop)
@@ -148,7 +158,8 @@ pub fn pipe(flags: fcntl::OFlag) -> Result<(Fd, Fd), nix::Error> {
 					fcntl::OFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFL).unwrap())
 						.unwrap();
 				flags |= new_flags & !fcntl::OFlag::O_CLOEXEC;
-				let _ = fcntl::fcntl(fd, fcntl::FcntlArg::F_SETFL(flags)).unwrap();
+				let err = fcntl::fcntl(fd, fcntl::FcntlArg::F_SETFL(flags)).unwrap();
+				assert_eq!(err, 0);
 				let mut flags =
 					fcntl::FdFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap())
 						.unwrap();

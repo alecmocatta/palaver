@@ -24,6 +24,8 @@
 //! }
 //! ```
 
+// See also https://github.com/qt/qtbase/blob/v5.12.0/src/3rdparty/forkfd/forkfd.c
+
 #[cfg(target_os = "freebsd")]
 use super::Fd;
 use nix::libc;
