@@ -503,7 +503,12 @@ pub fn fd_path(fd: Fd) -> io::Result<path::PathBuf> {
 	{
 		Ok(path::PathBuf::from(format!("/proc/self/fd/{}", fd)))
 	}
-	#[cfg(any(target_os = "freebsd", target_os = "macos", target_os = "ios"))]
+	#[cfg(any(
+		target_os = "freebsd",
+		target_os = "netbsd",
+		target_os = "macos",
+		target_os = "ios"
+	))]
 	{
 		Ok(path::PathBuf::from(format!("/dev/fd/{}", fd)))
 	}
@@ -511,6 +516,7 @@ pub fn fd_path(fd: Fd) -> io::Result<path::PathBuf> {
 		target_os = "android",
 		target_os = "linux",
 		target_os = "freebsd",
+		target_os = "netbsd",
 		target_os = "macos",
 		target_os = "ios"
 	)))]
