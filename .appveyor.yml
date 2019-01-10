@@ -11,7 +11,7 @@ environment:
 
 install:
   - appveyor-retry appveyor DownloadFile https://win.rustup.rs/ -FileName rustup-init.exe
-  - rustup-init.exe -y --default-host %TARGET% --default-toolchain nightly
+  - rustup-init.exe -y --default-host %TARGET% --default-toolchain nightly-2019-01-09
   - set PATH=%PATH%;C:\Users\appveyor\.cargo\bin
 
   - rustc -V
