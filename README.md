@@ -26,14 +26,14 @@ This library attempts to provide reliable polyfills for functionality that isn't
 <tr><td><code>copy_fd()</code></td><td>Copy a file descriptor to a specific offset</td><td>✓</td><td>✓</td><td>–</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
 <tr><td><code>move_fd()</code></td><td>Move a file descriptor to a specific offset</td><td>✓</td><td>✓</td><td>–</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
 <tr><td><code>move_fds()</code></td><td>Move file descriptors to specific offsets</td><td>✓</td><td>✓</td><td>–</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
-<tr><td><code>fd_dir()</code></td><td>Move a file descriptor</td><td>✓</td><td>✓</td><td>–</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
-<tr><td><code>fd_path()</code></td><td>Move a file descriptor</td><td>✓</td><td>✓</td><td>–</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>fd_dir()</code></td><td>Get a path to the file descriptor directory</td><td>✓</td><td>✓</td><td>–</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>fd_path()</code></td><td>Get a path to a file descriptor</td><td>✓</td><td>✓</td><td>–</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
 <tr><td><code>FdIter</code></td><td>Iterate all open file descriptors</td><td>✓</td><td>✓</td><td> </td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
 <tr><td><code>memfd_create()</code></td><td>Create an anonymous file</td><td>✓</td><td>✓</td><td> </td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
-<tr><td><code>fexecve()</code></td><td>Execute a file handle to an executable</td><td>✓</td><td>✓</td><td> </td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
-<tr><td><code>copy()</code></td><td>Copy by loopoing `io::copy`</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
-<tr><td><code>copy_sendfile()</code></td><td>Copy using `sendfile`</td><td>✓</td><td>✓</td><td> </td><td>✓</td><td> </td><td>✓</td><td>✓</td></tr>
-<tr><td><code>copy_splice()</code></td><td>Copy using `splice`</td><td>✓</td><td> </td><td> </td><td> </td><td> </td><td> </td><td>✓</td></tr>
+<tr><td><code>fexecve()</code></td><td>Execute program specified via file descriptor</td><td>✓</td><td>✓</td><td> </td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>copy()</code></td><td>Copy by looping <code>io::copy</code></td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>copy_sendfile()</code></td><td>Copy using <code>sendfile</code></td><td>✓</td><td>✓</td><td> </td><td>✓</td><td> </td><td>✓</td><td>✓</td></tr>
+<tr><td><code>copy_splice()</code></td><td>Copy using <code>splice</code></td><td>✓</td><td> </td><td> </td><td> </td><td> </td><td> </td><td>✓</td></tr>
 <tr><td><code>pipe()</code></td><td>Create a pipe</td><td>✓</td><td>✓</td><td> </td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
 <tr><th>Socket</th><th>Description</th><th>Linux</th><th>macOS</th><th>Windows</th><th>FreeBSD</th><th>NetBSD</th><th>iOS</th><th>Android</th></tr>
 <tr><td><code>socket()</code></td><td>Create a socket</td><td>✓</td><td>✓</td><td> </td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
