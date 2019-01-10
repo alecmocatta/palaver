@@ -2,6 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/palaver.svg?maxAge=86400)](https://crates.io/crates/palaver)
 [![MIT / Apache 2.0 licensed](https://img.shields.io/crates/l/palaver.svg?maxAge=2592000)](#License)
+[![Build Status](https://ci.appveyor.com/api/projects/status/github/alecmocatta/palaver?branch=master&svg=true)](https://ci.appveyor.com/project/alecmocatta/palaver)
 [![Build Status](https://circleci.com/gh/alecmocatta/palaver/tree/master.svg?style=shield)](https://circleci.com/gh/alecmocatta/palaver)
 [![Build Status](https://travis-ci.com/alecmocatta/palaver.svg?branch=master)](https://travis-ci.com/alecmocatta/palaver)
 
@@ -11,7 +12,7 @@ Cross-platform polyfills.
 
 This library attempts to provide reliable polyfills for functionality that isn't implemented on all platforms.
 
-palaver = "Platform Abstraction Layer" / pa·lav·er *n.* – prolonged and tedious fuss.
+`palaver` = "Platform Abstraction Layer" + pa·lav·er *n.* prolonged and tedious fuss.
 
 ## Functionality
 
@@ -30,9 +31,9 @@ palaver = "Platform Abstraction Layer" / pa·lav·er *n.* – prolonged and tedi
 <tr><td><code>FdIter</code></td><td>Iterate all open file descriptors</td><td>✓</td><td>✓</td><td> </td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
 <tr><td><code>memfd_create()</code></td><td>Create an anonymous file</td><td>✓</td><td>✓</td><td> </td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
 <tr><td><code>fexecve()</code></td><td>Execute a file handle to an executable</td><td>✓</td><td>✓</td><td> </td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
-<tr><td><code>copy()</code></td><td>Copy</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
-<tr><td><code>copy_sendfile()</code></td><td>Copy using sendfile</td><td>✓</td><td>✓</td><td> </td><td>✓</td><td> </td><td>✓</td><td>✓</td></tr>
-<tr><td><code>copy_splice()</code></td><td>Copy using splice</td><td>✓</td><td> </td><td> </td><td> </td><td> </td><td> </td><td>✓</td></tr>
+<tr><td><code>copy()</code></td><td>Copy by loopoing `io::copy`</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>copy_sendfile()</code></td><td>Copy using `sendfile`</td><td>✓</td><td>✓</td><td> </td><td>✓</td><td> </td><td>✓</td><td>✓</td></tr>
+<tr><td><code>copy_splice()</code></td><td>Copy using `splice`</td><td>✓</td><td> </td><td> </td><td> </td><td> </td><td> </td><td>✓</td></tr>
 <tr><td><code>pipe()</code></td><td>Create a pipe</td><td>✓</td><td>✓</td><td> </td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
 <tr><th>Socket</th><th>Description</th><th>Linux</th><th>macOS</th><th>Windows</th><th>FreeBSD</th><th>NetBSD</th><th>iOS</th><th>Android</th></tr>
 <tr><td><code>socket()</code></td><td>Create a socket</td><td>✓</td><td>✓</td><td> </td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>

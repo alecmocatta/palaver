@@ -539,6 +539,7 @@ pub fn fd_path(fd: Fd) -> io::Result<path::PathBuf> {
 /// use palaver::file::FdIter;
 ///
 /// // Close all file descriptors except std{in,out,err}.
+/// # #[cfg(unix)]
 /// for fd in FdIter::new().unwrap() {
 /// 	if fd > 2 {
 /// 		nix::unistd::close(fd).unwrap();
