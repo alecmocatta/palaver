@@ -1,13 +1,10 @@
 //! File and file descriptor-related functionality
 
-#[cfg(unix)]
 use super::*;
 #[cfg(unix)]
 use ext::ToHex;
 #[cfg(unix)]
 use nix::{errno, fcntl, sys::stat, unistd};
-#[cfg(unix)]
-use proc::fd_path;
 #[cfg(any(
 	target_os = "linux",
 	target_os = "android",
@@ -16,9 +13,13 @@ use proc::fd_path;
 	target_os = "freebsd"
 ))]
 use std::convert::TryInto;
-use std::io::{self, Read, Write};
 #[cfg(unix)]
-use std::{ffi::CStr, ffi::CString, fs, mem, os::unix::io::AsRawFd, path};
+use std::{
+	ffi::{CStr, CString, OsString}, fs, mem, os::unix::ffi::OsStringExt, os::unix::io::AsRawFd
+};
+use std::{
+	fmt, io::{self, Read, Write}, path
+};
 
 /// Maps file descriptors [(from,to)]
 #[cfg(unix)]
@@ -362,7 +363,7 @@ pub fn fexecve(fd: Fd, arg: &[CString], env: &[CString]) -> Result<void::Void, n
 	}
 }
 
-/// Loops io::copy till len elapsed or error
+/// Loops `io::copy` till len elapsed or error
 pub fn copy<R: ?Sized, W: ?Sized>(reader: &mut R, writer: &mut W, len: u64) -> io::Result<()>
 where
 	R: Read,
@@ -375,7 +376,7 @@ where
 	Ok(())
 }
 
-/// Loops sendfile till len elapsed or error
+/// Loops `sendfile` till len elapsed or error
 #[cfg(unix)]
 pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Result<(), nix::Error> {
 	#[cfg(any(target_os = "android", target_os = "linux"))]
@@ -452,7 +453,7 @@ pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Resu
 	}
 }
 
-/// Loops splice till len elapsed or error
+/// Loops `splice` till len elapsed or error
 #[cfg(any(target_os = "android", target_os = "linux"))]
 pub fn copy_splice<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Result<(), nix::Error> {
 	let mut offset = 0;
@@ -470,4 +471,144 @@ pub fn copy_splice<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Result
 		offset += n;
 	}
 	Ok(())
+}
+
+/// Returns the path of the directory that contains entries for each open file descriptor. On Linux this is `/proc/self/fd`. Doesn't work on Windows.
+pub fn fd_dir() -> io::Result<path::PathBuf> {
+	#[cfg(any(target_os = "android", target_os = "linux"))]
+	{
+		Ok(path::PathBuf::from("/proc/self/fd"))
+	}
+	#[cfg(any(target_os = "freebsd", target_os = "macos", target_os = "ios"))]
+	{
+		Ok(path::PathBuf::from("/dev/fd"))
+	}
+	#[cfg(not(any(
+		target_os = "android",
+		target_os = "linux",
+		target_os = "freebsd",
+		target_os = "macos",
+		target_os = "ios"
+	)))]
+	{
+		Err(io::Error::new(
+			io::ErrorKind::NotFound,
+			"no known /proc/self/fd equivalent for OS",
+		))
+	}
+}
+/// Returns the path of the entry for a particular open file descriptor. On Linux this is `/proc/self/fd/{fd}`. Doesn't work on Windows.
+pub fn fd_path(fd: Fd) -> io::Result<path::PathBuf> {
+	#[cfg(any(target_os = "android", target_os = "linux"))]
+	{
+		Ok(path::PathBuf::from(format!("/proc/self/fd/{}", fd)))
+	}
+	#[cfg(any(target_os = "freebsd", target_os = "macos", target_os = "ios"))]
+	{
+		Ok(path::PathBuf::from(format!("/dev/fd/{}", fd)))
+	}
+	#[cfg(not(any(
+		target_os = "android",
+		target_os = "linux",
+		target_os = "freebsd",
+		target_os = "macos",
+		target_os = "ios"
+	)))]
+	{
+		let _ = fd;
+		Err(io::Error::new(
+			io::ErrorKind::NotFound,
+			"no known /proc/self/fd equivalent for OS",
+		))
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+/// Iterator for all open file descriptors. Doesn't work on Windows.
+///
+/// # Examples
+///
+/// ```
+/// use palaver::file::FdIter;
+///
+/// // Close all file descriptors except std{in,out,err}.
+/// for fd in FdIter::new().unwrap() {
+/// 	if fd > 2 {
+/// 		nix::unistd::close(fd).unwrap();
+/// 	}
+/// }
+/// ```
+pub struct FdIter(#[cfg(unix)] *mut libc::DIR);
+impl FdIter {
+	/// Create a new FdIter. Returns Err on OSs that don't support this.
+	pub fn new() -> Result<Self, io::Error> {
+		let dir = fd_dir()?;
+		#[cfg(unix)]
+		{
+			let dir =
+				CString::new(<path::PathBuf as Into<OsString>>::into(dir).into_vec()).unwrap();
+			let dirp: *mut libc::DIR = unsafe { libc::opendir(dir.as_ptr()) };
+			assert!(!dirp.is_null());
+			Ok(Self(dirp))
+		}
+		#[cfg(windows)]
+		{
+			let _ = dir;
+			Err(io::Error::new(
+				io::ErrorKind::NotFound,
+				"can't iterate dir?",
+			))
+		}
+	}
+}
+impl Iterator for FdIter {
+	// https://stackoverflow.com/questions/899038/getting-the-highest-allocated-file-descriptor/918469#918469
+	type Item = Fd;
+
+	fn next(&mut self) -> Option<Self::Item> {
+		#[cfg(unix)]
+		{
+			let mut dent;
+			while {
+				dent = unsafe { libc::readdir(self.0) };
+				!dent.is_null()
+			} {
+				// https://github.com/rust-lang/rust/issues/34668
+				let name = unsafe { CStr::from_ptr((*dent).d_name.as_ptr()) };
+				if name == CStr::from_bytes_with_nul(b".\0").unwrap()
+					|| name == CStr::from_bytes_with_nul(b"..\0").unwrap()
+				{
+					continue;
+				}
+				let fd = name
+					.to_str()
+					.map_err(|_| ())
+					.and_then(|fd| fd.parse::<Fd>().map_err(|_| ()));
+				if fd.is_err() || fd.unwrap() == unsafe { libc::dirfd(self.0) } {
+					continue;
+				}
+				return Some(fd.unwrap());
+			}
+			None
+		}
+		#[cfg(windows)]
+		{
+			unreachable!()
+		}
+	}
+}
+impl fmt::Debug for FdIter {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		f.debug_struct("FdIter").finish()
+	}
+}
+impl Drop for FdIter {
+	fn drop(&mut self) {
+		#[cfg(unix)]
+		{
+			let ret = unsafe { libc::closedir(self.0) };
+			assert_eq!(ret, 0);
+		}
+	}
 }

@@ -9,11 +9,49 @@
 
 Cross-platform polyfills.
 
-This library attempts to provide reliable polyfills for functionality that isn't implemented on all platforms, for example `gettid`, `memfd_create`, `fexecve`, `/proc/self`, as well as providing non-atomic versions of functions like `accept4`, `socket`+`SOCK_CLOEXEC`, `pipe2`, and other miscellanea like `seal` to make a file descriptor read-only thus suitable for `fexecve`.
+This library attempts to provide reliable polyfills for functionality that isn't implemented on all platforms.
 
 palaver = "Platform Abstraction Layer" / pa·lav·er *n.* – prolonged and tedious fuss.
 
-It's currently used on unix-family systems; most Windows functionality is TODO.
+## Functionality
+
+<table><!-- https://github.com/alecmocatta/palaver/new/master to preview changes -->
+<tr><th>Threading</th><th>Description</th><th>Linux</th><th>macOS</th><th>Windows</th><th>FreeBSD</th><th>NetBSD</th><th>iOS</th><th>Android</th></tr>
+<tr><td><code>gettid()</code></td><td>Get thread ID</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>count()</code></td><td>Number of threads in current process</td><td>✓</td><td>✓</td><td> </td><td> </td><td> </td><td>✓</td><td>✓</td></tr>
+<tr><th>Files</th><th>Description</th><th>Linux</th><th>macOS</th><th>Windows</th><th>FreeBSD</th><th>NetBSD</th><th>iOS</th><th>Android</th></tr>
+<tr><td><code>move_fds()</code></td><td>Move file descriptors to specific offsets</td><td>✓</td><td>✓</td><td>–</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>seal_fd()</code></td><td>Make a file descriptor read-only</td><td>✓</td><td>✓</td><td> </td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>dup_fd()</code></td><td>Duplicate a file descriptor</td><td>✓</td><td>✓</td><td> </td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>copy_fd()</code></td><td>Copy a file descriptor</td><td>✓</td><td>✓</td><td>–</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>move_fd()</code></td><td>Move a file descriptor</td><td>✓</td><td>✓</td><td>–</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>fd_dir()</code></td><td>Move a file descriptor</td><td>✓</td><td>✓</td><td>–</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>fd_path()</code></td><td>Move a file descriptor</td><td>✓</td><td>✓</td><td>–</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>FdIter</code></td><td>Iterate all open file descriptors</td><td>✓</td><td>✓</td><td> </td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>memfd_create()</code></td><td>Create an anonymous file</td><td>✓</td><td>✓</td><td> </td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>fexecve()</code></td><td>Execute a file handle to an executable</td><td>✓</td><td>✓</td><td> </td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>copy()</code></td><td>Copy</td><td>✓</td><td>✓</td><td> </td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>copy_sendfile()</code></td><td>Copy using sendfile</td><td>✓</td><td>✓</td><td> </td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>copy_splice()</code></td><td>Copy using splice</td><td>✓</td><td>✓</td><td> </td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><th>Socket</th><th>Description</th><th>Linux</th><th>macOS</th><th>Windows</th><th>FreeBSD</th><th>NetBSD</th><th>iOS</th><th>Android</th></tr>
+<tr><td><code>socket()</code></td><td>Create a socket</td><td>✓</td><td>✓</td><td> </td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>accept()</code></td><td>Accept a connection on a socket</td><td>✓</td><td>✓</td><td> </td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>is_connected()</code></td><td>Get whether a pending connection is connected</td><td>✓</td><td>✓</td><td> </td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>unreceived()</code></td><td>Get number of bytes readable</td><td>✓</td><td>✓</td><td> </td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>unsent()</code></td><td>Get number of bytes that have yet to be acknowledged</td><td>✓</td><td>✓</td><td> </td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><th>Env</th><th>Description</th><th>Linux</th><th>macOS</th><th>Windows</th><th>FreeBSD</th><th>NetBSD</th><th>iOS</th><th>Android</th></tr>
+<tr><td><code>exe()</code></td><td>Opens the current running executable</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>exe_path()</code></td><td>Get a path to the current running executable</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>args()</code></td><td>Get command line arguments</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>args_os()</code></td><td>Get command line arguments</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>vars()</code></td><td>Get environment variables</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>vars_os()</code></td><td>Get environment variables</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><th>Fork</th><th>Description</th><th>Linux</th><th>macOS</th><th>Windows</th><th>FreeBSD</th><th>NetBSD</th><th>iOS</th><th>Android</th></tr>
+<tr><td><code>is()</code></td><td>Check if running under Valgrind</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><th>Valgrind</th><th>Description</th><th>Linux</th><th>macOS</th><th>Windows</th><th>FreeBSD</th><th>NetBSD</th><th>iOS</th><th>Android</th></tr>
+<tr><td><code>is()</code></td><td>Check if running under Valgrind</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><code>start_fd()</code></td><td>Get Valgrind's file descriptor range</td><td>✓</td><td>✓</td><td>–</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+</table>
 
 ## License
 Licensed under either of
