@@ -1,4 +1,6 @@
-use palaver::proc::*;
+use palaver::env::exe;
+#[cfg(unix)]
+use palaver::file::{fd_path, FdIter};
 #[cfg(unix)]
 use std::fs;
 

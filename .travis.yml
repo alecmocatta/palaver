@@ -1,5 +1,5 @@
 language: rust
-rust: nightly
+rust: nightly-2019-01-09
 # cache:
 #   - apt
 #   - cargo
@@ -13,7 +13,7 @@ addons:
 
 env:
   global:
-    - RUST_LINT_VERSION=nightly-2019-01-03
+    - RUST_LINT_VERSION=nightly-2019-01-09
 
 matrix:
   include:

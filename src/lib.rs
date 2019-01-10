@@ -22,20 +22,18 @@
 	clippy::pedantic
 )] // from https://github.com/rust-unofficial/patterns/blob/master/anti_patterns/deny-warnings.md
 #![allow(
-	clippy::inline_always,
 	clippy::doc_markdown,
 	clippy::if_not_else,
-	clippy::indexing_slicing,
 	clippy::shadow_unrelated,
 	clippy::similar_names,
 	clippy::module_name_repetitions
 )]
 
+pub mod env;
 mod ext;
 pub mod file;
 #[cfg(unix)]
 pub mod fork;
-pub mod proc;
 pub mod socket;
 pub mod thread;
 pub mod valgrind;

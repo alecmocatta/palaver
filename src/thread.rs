@@ -13,11 +13,11 @@ use std::convert::TryInto;
 
 /// Get an identifier for the thread;
 ///
-/// - uses gettid on Linux;
-/// - pthread_threadid_np on macOS;
-/// - pthread_getthreadid_np on FreeBSD;
-/// - _lwp_self on NetBSD;
-/// - GetCurrentThreadId on windows.
+/// - uses `gettid` on Linux;
+/// - `pthread_threadid_np` on macOS;
+/// - `pthread_getthreadid_np` on FreeBSD;
+/// - `_lwp_self` on NetBSD;
+/// - `GetCurrentThreadId` on Windows.
 #[inline]
 pub fn gettid() -> u64 {
 	#[cfg(any(target_os = "android", target_os = "linux"))]

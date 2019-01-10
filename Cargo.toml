@@ -17,7 +17,7 @@ readme = "README.md"
 edition = "2018"
 
 [badges]
-#appveyor = { repository = "alecmocatta/palaver" }
+appveyor = { repository = "alecmocatta/palaver" }
 circle-ci = { repository = "alecmocatta/palaver" }
 #gitlab = { repository = "alecmocatta/palaver" }
 travis-ci = { repository = "alecmocatta/palaver" }
@@ -28,6 +28,7 @@ maintenance = { status = "actively-developed" }
 valgrind_request = "1.1"
 void = "1.0"
 bitflags = "1.0"
+lazy_static = "1.0"
 
 [target.'cfg(unix)'.dependencies]
 libc = "=0.2.46"
@@ -45,7 +46,11 @@ procinfo = "0.4"
 [replace]
 "libc:0.2.46" = {git = "https://github.com/alecmocatta/libc"}
 
+[dev-dependencies]
+serde_json = "1.0"
+escargot = "0.4"
+
 [[test]]
 name = "test"
-path = "tests/proc.rs"
+path = "tests/fd_iter.rs"
 harness = false
