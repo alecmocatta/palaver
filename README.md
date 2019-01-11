@@ -6,7 +6,7 @@
 [![Build Status](https://circleci.com/gh/alecmocatta/palaver/tree/master.svg?style=shield)](https://circleci.com/gh/alecmocatta/palaver)
 [![Build Status](https://travis-ci.com/alecmocatta/palaver.svg?branch=master)](https://travis-ci.com/alecmocatta/palaver)
 
-[Docs](https://docs.rs/palaver/0.1.0)
+[Docs](https://docs.rs/palaver/0.2.0)
 
 Cross-platform polyfills.
 
