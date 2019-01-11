@@ -1,5 +1,5 @@
 language: rust
-rust: nightly-2019-01-09
+rust: nightly
 # cache:
 #   - apt
 #   - cargo
