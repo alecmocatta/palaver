@@ -2,11 +2,9 @@
 //!
 //! **[Crates.io](https://crates.io/crates/palaver) │ [Repo](https://github.com/alecmocatta/palaver)**
 //!
-//! This library attempts to provide reliable polyfills for functionality that isn't implemented on all platforms, for example `gettid`, `memfd_create`, `fexecve`, `/proc/self`, as well as providing non-atomic versions of functions like `accept4`, `socket`+`SOCK_CLOEXEC`, `pipe2`, and other miscellanea like `seal` to make a file descriptor read-only thus suitable for `fexecve`.
+//! This library attempts to provide reliable polyfills for functionality that isn't implemented on all platforms.
 //!
-//! palaver = "Platform Abstraction Layer" / pa·lav·er *n.* – prolonged and tedious fuss.
-//!
-//! It's currently used on unix-family systems; most Windows functionality is TODO.
+//! `palaver` = "Platform Abstraction Layer" + pa·lav·er *n.* prolonged and tedious fuss.
 
 #![feature(try_from, uniform_paths)]
 #![doc(html_root_url = "https://docs.rs/palaver/0.1.0")]
