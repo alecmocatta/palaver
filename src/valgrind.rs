@@ -23,6 +23,7 @@ fn getrlimit(resource: libc::c_int) -> Result<libc::rlimit, nix::Error> {
 }
 
 /// Check if we're running under valgrind
+#[cfg(feature = "nightly")]
 pub fn is() -> bool {
 	valgrind_request::running_on_valgrind() > 0
 }

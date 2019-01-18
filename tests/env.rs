@@ -23,6 +23,7 @@ fn echo() {
 		.example("echo")
 		.current_release()
 		.current_target()
+		.no_default_features() // https://github.com/crate-ci/escargot/issues/23
 		.run()
 		.unwrap();
 	let echo = echo.path();
@@ -30,6 +31,7 @@ fn echo() {
 		.example("echo_no_main")
 		.current_release()
 		.current_target()
+		.no_default_features() // https://github.com/crate-ci/escargot/issues/23
 		.run()
 		.unwrap();
 	let echo_no_main = echo_no_main.path();

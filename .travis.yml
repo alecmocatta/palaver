@@ -13,7 +13,7 @@ addons:
 
 env:
   global:
-    - RUST_LINT_VERSION=nightly-2019-01-09
+    - RUST_LINT_VERSION=nightly-2019-01-18
 
 matrix:
   include:
