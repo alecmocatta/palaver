@@ -5,14 +5,6 @@ use super::*;
 use ext::ToHex;
 #[cfg(unix)]
 use nix::{errno, fcntl, sys::stat, unistd};
-#[cfg(any(
-	target_os = "linux",
-	target_os = "android",
-	target_os = "macos",
-	target_os = "ios",
-	target_os = "freebsd"
-))]
-use std::convert::TryInto;
 #[cfg(unix)]
 use std::{
 	ffi::{CStr, CString, OsString}, fs, mem, os::unix::ffi::OsStringExt, os::unix::io::AsRawFd
@@ -20,6 +12,14 @@ use std::{
 use std::{
 	fmt, io::{self, Read, Write}, path
 };
+#[cfg(any(
+	target_os = "linux",
+	target_os = "android",
+	target_os = "macos",
+	target_os = "ios",
+	target_os = "freebsd"
+))]
+use try_from::TryInto;
 
 /// Maps file descriptors [(from,to)]
 #[cfg(unix)]

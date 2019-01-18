@@ -9,7 +9,7 @@ use nix::libc;
 	target_os = "ios",
 	target_os = "freebsd"
 ))]
-use std::convert::TryInto;
+use try_from::TryInto;
 
 /// Get an identifier for the thread;
 ///
