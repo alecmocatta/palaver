@@ -24,14 +24,19 @@ travis-ci = { repository = "alecmocatta/palaver" }
 
 maintenance = { status = "actively-developed" }
 
+[features]
+default = ["nightly"]
+nightly = ["valgrind_request"]
+
 [dependencies]
-valgrind_request = "1.1"
+valgrind_request = { version = "1.1", optional = true }
 void = "1.0"
 bitflags = "1.0"
 lazy_static = "1.0"
+try_from = "0.3"
 
 [target.'cfg(unix)'.dependencies]
-libc = "=0.2.46"
+libc = "0.2.47"
 nix = "0.11"
 
 [target.'cfg(windows)'.dependencies]
@@ -42,9 +47,6 @@ mach = "0.2"
 
 [target.'cfg(any(target_os = "android", target_os = "linux"))'.dependencies]
 procinfo = "0.4"
-
-[replace]
-"libc:0.2.46" = { git = "https://github.com/alecmocatta/libc" }
 
 [dev-dependencies]
 serde_json = "1.0"

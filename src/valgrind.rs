@@ -5,9 +5,9 @@ use super::*;
 #[cfg(unix)]
 use nix::{errno, libc};
 #[cfg(unix)]
-use std::convert::TryInto;
-#[cfg(unix)]
 use std::mem;
+#[cfg(unix)]
+use try_from::TryInto;
 
 #[cfg(any(target_os = "android", target_os = "linux"))]
 fn getrlimit(resource: libc::c_int) -> Result<libc::rlimit64, nix::Error> {
@@ -23,6 +23,7 @@ fn getrlimit(resource: libc::c_int) -> Result<libc::rlimit, nix::Error> {
 }
 
 /// Check if we're running under valgrind
+#[cfg(feature = "nightly")]
 pub fn is() -> bool {
 	valgrind_request::running_on_valgrind() > 0
 }
