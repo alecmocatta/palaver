@@ -268,25 +268,13 @@ pub fn memfd_create(name: &CStr, cloexec: bool) -> Result<Fd, nix::Error> {
 /// Falls back to execve("/proc/self/fd/{fd}",...), falls back to execve("/tmp/{randomfilename}")
 #[cfg(unix)]
 pub fn fexecve(fd: Fd, arg: &[CString], env: &[CString]) -> Result<void::Void, nix::Error> {
-	#[cfg(any(
-		target_os = "android",
-		target_os = "freebsd",
-		target_os = "linux",
-		target_os = "netbsd",
-		target_os = "openbsd"
-	))]
+	#[cfg(any(target_os = "android", target_os = "freebsd", target_os = "linux"))]
 	{
 		unistd::fexecve(fd, arg, env)
 	}
 	#[cfg(all(
 		unix,
-		not(any(
-			target_os = "android",
-			target_os = "freebsd",
-			target_os = "linux",
-			target_os = "netbsd",
-			target_os = "openbsd"
-		))
+		not(any(target_os = "android", target_os = "freebsd", target_os = "linux"))
 	))]
 	{
 		use std::{
