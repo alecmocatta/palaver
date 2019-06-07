@@ -34,11 +34,9 @@ pub fn gettid() -> u64 {
 		// or mach_thread_self ?
 		#[link(name = "pthread")]
 		extern "C" {
-			fn pthread_threadid_np(
-				thread: libc::pthread_t, thread_id: *mut libc::uint64_t,
-			) -> libc::c_int;
+			fn pthread_threadid_np(thread: libc::pthread_t, thread_id: *mut u64) -> libc::c_int;
 		}
-		let mut tid: libc::uint64_t = unsafe { mem::uninitialized() };
+		let mut tid: u64 = unsafe { mem::uninitialized() };
 		let err = unsafe { pthread_threadid_np(0, &mut tid) };
 		assert_eq!(err, 0);
 		tid
