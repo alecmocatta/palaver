@@ -5,9 +5,9 @@ use super::*;
 #[cfg(unix)]
 use nix::{errno, libc};
 #[cfg(unix)]
-use std::mem;
+use std::convert::TryInto;
 #[cfg(unix)]
-use try_from::TryInto;
+use std::mem;
 
 #[cfg(all(target_os = "linux", not(target_env = "musl")))]
 fn getrlimit(resource: libc::__rlimit_resource_t) -> Result<libc::rlimit64, nix::Error> {

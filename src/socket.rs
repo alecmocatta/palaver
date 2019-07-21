@@ -5,7 +5,7 @@ use super::*;
 #[cfg(unix)]
 use nix::{libc, poll, sys::socket};
 #[cfg(unix)]
-use try_from::TryInto;
+use std::convert::TryInto;
 
 #[cfg(unix)]
 bitflags::bitflags! {
