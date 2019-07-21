@@ -6,7 +6,7 @@
 //!
 //! `palaver` = "Platform Abstraction Layer" + pa·lav·er *n.* prolonged and tedious fuss.
 
-#![doc(html_root_url = "https://docs.rs/palaver/0.2.1")]
+#![doc(html_root_url = "https://docs.rs/palaver/0.2.2")]
 #![warn(
 	missing_copy_implementations,
 	missing_debug_implementations,
