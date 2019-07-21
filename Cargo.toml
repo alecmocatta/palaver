@@ -39,7 +39,7 @@ nix = "0.13"
 winapi = { version = "0.3", features = ["processthreadsapi"] }
 
 [target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
-mach = "0.2"
+mach = "0.3"
 
 [target.'cfg(any(target_os = "android", target_os = "linux"))'.dependencies]
 procinfo = "0.4"
