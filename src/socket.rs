@@ -128,10 +128,10 @@ pub fn accept(sockfd: Fd, flags: SockFlag) -> Result<Fd, nix::Error> {
 /// Note: Must be called before any data has been written to this `fd`.
 #[cfg(unix)]
 pub fn is_connected(fd: Fd) -> bool {
-	let mut events = [poll::PollFd::new(fd, poll::EventFlags::POLLOUT)];
+	let mut events = [poll::PollFd::new(fd, poll::PollFlags::POLLOUT)];
 	let n = poll::poll(&mut events, 0).unwrap();
 	assert!(n == 0 || n == 1);
-	n == 1 && events[0].revents().unwrap() == poll::EventFlags::POLLOUT
+	n == 1 && events[0].revents().unwrap() == poll::PollFlags::POLLOUT
 }
 
 /// Count of bytes that have yet to be read from a socket
