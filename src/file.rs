@@ -210,7 +210,7 @@ pub fn memfd_create(name: &CStr, cloexec: bool) -> Result<Fd, nix::Error> {
 	let ret = ret.or_else(|_e| {
 		use nix::sys::mman;
 		let mut random: [u8; 16] = unsafe { mem::uninitialized() }; // ENAMETOOLONG on mac for 16
-															  // thread_rng uses getrandom(2) on >=3.17 (same as memfd_create), permanently opens /dev/urandom on fail, which messes our fd numbers. TODO: less assumptive about fd numbers..
+															// thread_rng uses getrandom(2) on >=3.17 (same as memfd_create), permanently opens /dev/urandom on fail, which messes our fd numbers. TODO: less assumptive about fd numbers..
 		let rand = fs::File::open("/dev/urandom").expect("Couldn't open /dev/urandom");
 		(&rand).read_exact(&mut random).unwrap();
 		drop(rand);
@@ -277,9 +277,7 @@ pub fn fexecve(fd: Fd, arg: &[CString], env: &[CString]) -> Result<void::Void, n
 		not(any(target_os = "android", target_os = "freebsd", target_os = "linux"))
 	))]
 	{
-		use std::{
-			ffi::OsString, os::unix::{ffi::OsStringExt, io::FromRawFd}, process
-		};
+		use std::{os::unix::io::FromRawFd, process};
 		unistd::execve(
 			&CString::new(<OsString as OsStringExt>::into_vec(
 				fd_path(fd).unwrap().into(),

@@ -46,10 +46,7 @@ fn echo() {
 		vec!["abc".into(), "ZA̡͊͠͝LGΌ".into()],
 		vec![
 			("GET_ENV_LKJHGFDSA".into(), "get_env_asdfghjkl".into()),
-			(
-				"GET_ENV_ZA̡͊͠͝LGΌ".into(),
-				"get_env_ZA̡͊͠͝LGΌ".into(),
-			),
+			("GET_ENV_ZA̡͊͠͝LGΌ".into(), "get_env_ZA̡͊͠͝LGΌ".into()),
 		],
 	);
 	run_echo(&echo_no_main, vec![], vec![]);
@@ -63,10 +60,7 @@ fn echo() {
 		vec!["abc".into(), "ZA̡͊͠͝LGΌ".into()],
 		vec![
 			("GET_ENV_LKJHGFDSA".into(), "get_env_asdfghjkl".into()),
-			(
-				"GET_ENV_ZA̡͊͠͝LGΌ".into(),
-				"get_env_ZA̡͊͠͝LGΌ".into(),
-			),
+			("GET_ENV_ZA̡͊͠͝LGΌ".into(), "get_env_ZA̡͊͠͝LGΌ".into()),
 		],
 	);
 }

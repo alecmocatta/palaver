@@ -154,7 +154,10 @@ pub fn unsent(fd: Fd) -> usize {
 			fd,
 			libc::SOL_SOCKET,
 			libc::SO_NWRITE,
-			&mut unsent as *mut libc::c_int as *mut libc::c_void,
+			{
+				let x: *mut libc::c_int = &mut unsent;
+				x
+			} as *mut libc::c_void,
 			&mut (std::mem::size_of_val(&unsent).try_into().unwrap()),
 		)
 	};
