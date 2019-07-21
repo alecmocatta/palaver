@@ -2,9 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/palaver.svg?maxAge=86400)](https://crates.io/crates/palaver)
 [![MIT / Apache 2.0 licensed](https://img.shields.io/crates/l/palaver.svg?maxAge=2592000)](#License)
-[![Build Status](https://ci.appveyor.com/api/projects/status/github/alecmocatta/palaver?branch=master&svg=true)](https://ci.appveyor.com/project/alecmocatta/palaver)
-[![Build Status](https://circleci.com/gh/alecmocatta/palaver/tree/master.svg?style=shield)](https://circleci.com/gh/alecmocatta/palaver)
-[![Build Status](https://travis-ci.com/alecmocatta/palaver.svg?branch=master)](https://travis-ci.com/alecmocatta/palaver)
+[![Build Status](https://dev.azure.com/alecmocatta/palaver/_apis/build/status/tests?branchName=master)](https://dev.azure.com/alecmocatta/palaver/_build/latest?branchName=master)
 
 [Docs](https://docs.rs/palaver/0.2.1)
 
