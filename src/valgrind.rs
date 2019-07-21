@@ -9,7 +9,13 @@ use std::mem;
 #[cfg(unix)]
 use try_from::TryInto;
 
-#[cfg(any(target_os = "android", target_os = "linux"))]
+#[cfg(all(target_os = "linux", not(target_env = "musl")))]
+fn getrlimit(resource: libc::__rlimit_resource_t) -> Result<libc::rlimit64, nix::Error> {
+	let mut rlim: libc::rlimit64 = unsafe { mem::uninitialized() };
+	let err = unsafe { libc::getrlimit64(resource, &mut rlim) };
+	errno::Errno::result(err).map(|_| rlim)
+}
+#[cfg(any(target_os = "android", target_env = "musl"))]
 fn getrlimit(resource: libc::c_int) -> Result<libc::rlimit64, nix::Error> {
 	let mut rlim: libc::rlimit64 = unsafe { mem::uninitialized() };
 	let err = unsafe { libc::getrlimit64(resource, &mut rlim) };

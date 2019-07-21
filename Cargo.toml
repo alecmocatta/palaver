@@ -17,12 +17,8 @@ readme = "README.md"
 edition = "2018"
 
 [badges]
-appveyor = { repository = "alecmocatta/palaver" }
-circle-ci = { repository = "alecmocatta/palaver" }
-#gitlab = { repository = "alecmocatta/palaver" }
-travis-ci = { repository = "alecmocatta/palaver" }
-
-maintenance = { status = "actively-developed" }
+azure-devops = { project = "alecmocatta/palaver", pipeline = "tests" }
+maintenance = { status = "actively-maintained" }
 
 [features]
 default = ["nightly"]
