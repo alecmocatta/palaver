@@ -1,8 +1,6 @@
 use palaver::env::exe;
 #[cfg(unix)]
 use palaver::file::FdIter;
-#[cfg(unix)]
-use std::fs;
 
 fn main() {
 	let _ = exe().unwrap();
