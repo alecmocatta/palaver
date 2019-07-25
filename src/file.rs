@@ -61,7 +61,6 @@ pub fn seal_fd(fd: Fd) {
 		.unwrap()
 		& !(fcntl::OFlag::O_WRONLY | fcntl::OFlag::O_RDWR)
 		| fcntl::OFlag::O_RDONLY;
-	unistd::close(fd).unwrap();
 	let err = fcntl::fcntl(fd2, fcntl::FcntlArg::F_SETFL(fl_flags)).unwrap();
 	assert_eq!(err, 0);
 	move_fd(fd2, fd, Some(fd_flags), false).unwrap();
