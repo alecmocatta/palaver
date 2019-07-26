@@ -57,10 +57,10 @@ pub fn seal_fd(fd: Fd) {
 	.unwrap();
 	let fd_flags =
 		fcntl::FdFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap()).unwrap();
-	let fl_flags = fcntl::OFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFL).unwrap())
-		.unwrap()
-		& !(fcntl::OFlag::O_WRONLY | fcntl::OFlag::O_RDWR)
-		| fcntl::OFlag::O_RDONLY;
+	let fl_flags =
+		fcntl::OFlag::from_bits_truncate(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFL).unwrap())
+			& !(fcntl::OFlag::O_WRONLY | fcntl::OFlag::O_RDWR)
+			| fcntl::OFlag::O_RDONLY;
 	let err = fcntl::fcntl(fd2, fcntl::FcntlArg::F_SETFL(fl_flags)).unwrap();
 	assert_eq!(err, 0);
 	move_fd(fd2, fd, Some(fd_flags), false).unwrap();
@@ -154,9 +154,9 @@ pub fn pipe(flags: fcntl::OFlag) -> Result<(Fd, Fd), nix::Error> {
 	{
 		unistd::pipe().map(|(read, write)| {
 			fn apply(fd: Fd, new_flags: fcntl::OFlag) {
-				let mut flags =
-					fcntl::OFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFL).unwrap())
-						.unwrap();
+				let mut flags = fcntl::OFlag::from_bits_truncate(
+					fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFL).unwrap(),
+				);
 				flags |= new_flags & !fcntl::OFlag::O_CLOEXEC;
 				let err = fcntl::fcntl(fd, fcntl::FcntlArg::F_SETFL(flags)).unwrap();
 				assert_eq!(err, 0);
