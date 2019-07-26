@@ -53,9 +53,9 @@ pub fn socket<T: Into<Option<socket::SockProtocol>>>(
 		)))]
 		{
 			use nix::fcntl;
-			let mut flags_ =
-				fcntl::OFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFL).unwrap())
-					.unwrap();
+			let mut flags_ = fcntl::OFlag::from_bits_truncate(
+				fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFL).unwrap(),
+			);
 			flags_.set(
 				fcntl::OFlag::O_NONBLOCK,
 				flags.contains(SockFlag::SOCK_NONBLOCK),

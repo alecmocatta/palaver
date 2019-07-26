@@ -18,7 +18,7 @@ edition = "2018"
 
 [badges]
 azure-devops = { project = "alecmocatta/palaver", pipeline = "tests" }
-maintenance = { status = "actively-maintained" }
+maintenance = { status = "actively-developed" }
 
 [features]
 nightly = ["valgrind_request"]
