@@ -1,12 +1,8 @@
 //! Valgrind-related functionality
 
-#[cfg(unix)]
 use super::*;
-#[cfg(unix)]
 use nix::{errno, libc};
-#[cfg(unix)]
 use std::convert::TryInto;
-#[cfg(unix)]
 use std::mem;
 
 #[cfg(all(target_os = "linux", not(target_env = "musl")))]
@@ -36,7 +32,6 @@ pub fn is() -> Result<bool, ()> {
 	Err(())
 }
 /// Valgrind sets up various file descriptors for its purposes; they're all > any user fds, and this function gets the lowest of them
-#[cfg(unix)]
 pub fn start_fd() -> Fd {
 	let rlim = getrlimit(libc::RLIMIT_NOFILE).unwrap();
 	let valgrind_start_fd = rlim.rlim_max;

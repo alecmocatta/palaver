@@ -33,6 +33,7 @@ pub mod file;
 pub mod fork;
 pub mod socket;
 pub mod thread;
+#[cfg(unix)]
 pub mod valgrind;
 
 #[cfg(unix)]
