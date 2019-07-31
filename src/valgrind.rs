@@ -1,13 +1,8 @@
 //! Valgrind-related functionality
 
-#[cfg(unix)]
 use super::*;
-#[cfg(unix)]
 use nix::{errno, libc};
-#[cfg(unix)]
-use std::convert::TryInto;
-#[cfg(unix)]
-use std::mem;
+use std::{convert::TryInto, mem};
 
 #[cfg(all(target_os = "linux", not(target_env = "musl")))]
 fn getrlimit(resource: libc::__rlimit_resource_t) -> Result<libc::rlimit64, nix::Error> {
@@ -29,12 +24,13 @@ fn getrlimit(resource: libc::c_int) -> Result<libc::rlimit, nix::Error> {
 }
 
 /// Check if we're running under valgrind
-#[cfg(feature = "nightly")]
-pub fn is() -> bool {
-	valgrind_request::running_on_valgrind() > 0
+pub fn is() -> Result<bool, ()> {
+	#[cfg(feature = "nightly")]
+	return Ok(valgrind_request::running_on_valgrind() > 0);
+	#[cfg(not(feature = "nightly"))]
+	Err(())
 }
 /// Valgrind sets up various file descriptors for its purposes; they're all > any user fds, and this function gets the lowest of them
-#[cfg(unix)]
 pub fn start_fd() -> Fd {
 	let rlim = getrlimit(libc::RLIMIT_NOFILE).unwrap();
 	let valgrind_start_fd = rlim.rlim_max;

@@ -6,7 +6,7 @@
 //!
 //! `palaver` = "Platform Abstraction Layer" + pa·lav·er *n.* prolonged and tedious fuss.
 
-#![doc(html_root_url = "https://docs.rs/palaver/0.2.4")]
+#![doc(html_root_url = "https://docs.rs/palaver/0.2.5")]
 #![warn(
 	missing_copy_implementations,
 	missing_debug_implementations,
@@ -33,6 +33,7 @@ pub mod file;
 pub mod fork;
 pub mod socket;
 pub mod thread;
+#[cfg(unix)]
 pub mod valgrind;
 
 #[cfg(unix)]

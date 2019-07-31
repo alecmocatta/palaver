@@ -338,7 +338,7 @@ fn parse_env(input: &[u8]) -> Option<(OsString, OsString)> {
 )]
 #[cfg_attr(target_os = "macos", link_section = "__DATA,__mod_init_func")]
 // #[cfg_attr(target_os = "windows", link_section = ".CRT$XCU")] XIU
-#[used] // no_mangle and deny(private_no_mangle_statics), or doing something with addr elsewhere might be alternative?
+#[used]
 pub static GRAB_ARGV_ENVP: extern "C" fn(
 	argc: libc::c_int,
 	argv: *const *const c_char,
