@@ -1,34 +1,23 @@
-//! A Rust fork wrapper that uses process descriptors (pdfork) on FreeBSD and normal fork elsewhere.
-//!
-//! Process descriptors are like file descriptors but for processes:
-//! - they are immune to PID race conditions (they track the exact process in the kernel);
-//! - they work in the [Capsicum](https://wiki.freebsd.org/Capsicum) capability mode sandbox.
-//!
-//! ```no_run
-//! extern crate libc;
-//! extern crate palaver;
-//! use palaver::fork::*;
-//!
-//! match fork().unwrap() {
-//!     ForkResult::Parent(child_proc) => {
-//!         // do stuff
-//!         // you can access child_proc.child_pid on any platform
-//!         // you can also access child_proc.child_pd on FreeBSD
-//!         if !child_proc.signal(libc::SIGTERM) {
-//!             panic!("sigterm");
-//!         }
-//!     },
-//!     ForkResult::Child => {
-//!         // do stuff
-//!     }
-//! }
-//! ```
+//! Process-related functionality
 
-// See also https://github.com/qt/qtbase/blob/v5.12.0/src/3rdparty/forkfd/forkfd.c
+use nix::libc;
+use std::process::Command;
 
 #[cfg(target_os = "freebsd")]
 use super::Fd;
-use nix::libc;
+
+/// Count the number of processes visible to this process. Counts the lines of `ps aux` minus one (the header).
+pub fn count() -> usize {
+	let out = Command::new("ps")
+		.arg("aux")
+		.output()
+		.expect("failed to execute process");
+	out.stdout
+		.split(|&x| x == b'\n')
+		.skip(1)
+		.filter(|x| !x.is_empty())
+		.count()
+}
 
 /// Child process handle
 #[allow(missing_copy_implementations)]
@@ -74,7 +63,33 @@ pub enum ForkResult {
 	Child,
 }
 
-/// Fork
+/// A Rust fork wrapper that uses process descriptors (pdfork) on FreeBSD and normal fork elsewhere.
+///
+/// Process descriptors are like file descriptors but for processes:
+/// - they are immune to PID race conditions (they track the exact process in the kernel);
+/// - they work in the [Capsicum](https://wiki.freebsd.org/Capsicum) capability mode sandbox.
+///
+/// ```no_run
+/// extern crate libc;
+/// extern crate palaver;
+/// use palaver::process::*;
+///
+/// match fork().unwrap() {
+///     ForkResult::Parent(child_proc) => {
+///         // do stuff
+///         // you can access child_proc.child_pid on any platform
+///         // you can also access child_proc.child_pd on FreeBSD
+///         if !child_proc.signal(libc::SIGTERM) {
+///             panic!("sigterm");
+///         }
+///     },
+///     ForkResult::Child => {
+///         // do stuff
+///     }
+/// }
+/// ```
+
+// See also https://github.com/qt/qtbase/blob/v5.12.0/src/3rdparty/forkfd/forkfd.c
 #[cfg(unix)]
 pub fn fork() -> Result<ForkResult, ()> {
 	#[cfg(target_os = "freebsd")]
@@ -102,5 +117,14 @@ pub fn fork() -> Result<ForkResult, ()> {
 		} else {
 			Ok(ForkResult::Child)
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	#[test]
+	fn count() {
+		let count = super::count();
+		assert_ne!(count, 0);
 	}
 }

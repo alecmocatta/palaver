@@ -120,3 +120,13 @@ pub fn count() -> usize {
 	)))]
 	unimplemented!()
 }
+
+#[cfg(test)]
+mod tests {
+	#[test]
+	#[ignore] // fails on i686 linux https://github.com/alecmocatta/palaver/issues/24
+	fn count() {
+		let count = super::count();
+		assert_ne!(count, 0);
+	}
+}

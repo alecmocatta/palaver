@@ -50,6 +50,6 @@ escargot = "0.5"
 all-features = true
 
 [[test]]
-name = "test"
+name = "fd_iter"
 path = "tests/fd_iter.rs"
 harness = false
