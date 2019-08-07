@@ -46,6 +46,7 @@ This library attempts to provide reliable polyfills for functionality that isn't
 <tr><td><a href="https://docs.rs/palaver/0.2.6/palaver/env/fn.vars.html"><code>vars()</code></a></td><td>Get environment variables</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
 <tr><th>Process</th><th>Description</th><th>Linux</th><th>macOS</th><th>Windows</th><th>FreeBSD</th><th>NetBSD</th><th>iOS</th><th>Android</th></tr>
 <tr><td><a href="https://docs.rs/palaver/0.2.6/palaver/process/fn.count.html"><code>count()</code></a></td><td>Count the processes visible to the current process</td><td>✓</td><td>✓</td><td>–</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+<tr><td><a href="https://docs.rs/palaver/0.2.6/palaver/process/fn.count_threads.html"><code>count_threads()</code></a></td><td>Count the threads visible to the current process</td><td>✓</td><td>✓</td><td>–</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
 <tr><td><a href="https://docs.rs/palaver/0.2.6/palaver/process/fn.fork.html"><code>fork()</code></a></td><td>Fork a process, using process descriptors where available</td><td>✓</td><td>✓</td><td>–</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
 <tr><th>Valgrind</th><th>Description</th><th>Linux</th><th>macOS</th><th>Windows</th><th>FreeBSD</th><th>NetBSD</th><th>iOS</th><th>Android</th></tr>
 <tr><td><a href="https://docs.rs/palaver/0.2.6/palaver/valgrind/fn.is.html"><code>is()</code></a></td><td>Check if running under Valgrind</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
