@@ -22,7 +22,7 @@ pub fn count() -> usize {
 
 /// Count the number of threads visible to this process. Counts the lines of `ps -eL` and equivalent minus one (the header).
 pub fn count_threads() -> usize {
-	let out = if cfg!(any(target_os = "linux", target_os = "android", windows)) {
+	let out = if cfg!(any(target_os = "linux", target_os = "android")) {
 		Command::new("ps")
 			.arg("-eL")
 			.output()
@@ -152,13 +152,15 @@ mod tests {
 	fn count() {
 		let count = super::count();
 		assert_ne!(count, 0);
-		let count_threads = super::count_threads();
-		assert_ne!(count_threads, 0);
-		assert!(
-			count_threads >= count,
-			"{} threads < {} processes",
-			count_threads,
-			count
-		); // TODO: retry to avoid bad luck flakiness?
+		if !cfg!(windows) {
+			let count_threads = super::count_threads();
+			assert_ne!(count_threads, 0);
+			assert!(
+				count_threads >= count,
+				"{} threads < {} processes",
+				count_threads,
+				count
+			); // TODO: retry to avoid bad luck flakiness?
+		}
 	}
 }
