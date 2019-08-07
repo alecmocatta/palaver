@@ -29,7 +29,6 @@
 pub mod env;
 mod ext;
 pub mod file;
-#[cfg(unix)]
 pub mod process;
 pub mod socket;
 pub mod thread;

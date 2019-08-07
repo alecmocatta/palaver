@@ -1,5 +1,6 @@
 //! Process-related functionality
 
+#[cfg(unix)]
 use nix::libc;
 use std::process::Command;
 
@@ -20,6 +21,7 @@ pub fn count() -> usize {
 }
 
 /// Child process handle
+#[cfg(unix)]
 #[allow(missing_copy_implementations)]
 #[derive(Debug)]
 pub struct ChildHandle {
@@ -30,6 +32,7 @@ pub struct ChildHandle {
 	pub child_pd: Fd,
 }
 
+#[cfg(unix)]
 impl ChildHandle {
 	/// Signal the child process
 	#[cfg(unix)]
@@ -54,6 +57,7 @@ impl Drop for ChildHandle {
 }
 
 /// Fork result
+#[cfg(unix)]
 #[allow(missing_copy_implementations)]
 #[derive(Debug)]
 pub enum ForkResult {
