@@ -6,7 +6,7 @@
 //!
 //! `palaver` = "Platform Abstraction Layer" + pa·lav·er *n.* prolonged and tedious fuss.
 
-#![doc(html_root_url = "https://docs.rs/palaver/0.2.5")]
+#![doc(html_root_url = "https://docs.rs/palaver/0.2.6")]
 #![warn(
 	missing_copy_implementations,
 	missing_debug_implementations,
@@ -29,12 +29,13 @@
 pub mod env;
 mod ext;
 pub mod file;
-#[cfg(unix)]
-pub mod fork;
+pub mod process;
 pub mod socket;
 pub mod thread;
 #[cfg(unix)]
 pub mod valgrind;
+
+pub use process as fork;
 
 #[cfg(unix)]
 type Fd = std::os::unix::io::RawFd;
