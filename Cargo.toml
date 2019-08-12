@@ -1,6 +1,6 @@
 [package]
 name = "palaver"
-version = "0.2.6"
+version = "0.2.7"
 license = "MIT OR Apache-2.0"
 authors = ["Alec Mocatta <alec@mocatta.net>"]
 categories = ["os::unix-apis","os::windows-apis","os::macos-apis"]
