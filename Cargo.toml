@@ -1,6 +1,6 @@
 [package]
 name = "palaver"
-version = "0.2.6"
+version = "0.2.7"
 license = "MIT OR Apache-2.0"
 authors = ["Alec Mocatta <alec@mocatta.net>"]
 categories = ["os::unix-apis","os::windows-apis","os::macos-apis"]
@@ -31,7 +31,7 @@ lazy_static = "1.0"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.47"
-nix = "0.14"
+nix = "0.15"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["processthreadsapi"] }
