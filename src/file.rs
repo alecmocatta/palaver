@@ -383,12 +383,14 @@ pub fn fexecve(fd: Fd, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infallible
 				fd
 			})
 			.unwrap();
-			let from = unsafe { fs::File::from_raw_fd(fd) };
-			let to = unsafe { fs::File::from_raw_fd(to) };
-			let x = unistd::lseek(from.as_raw_fd(), 0, unistd::Whence::SeekSet).unwrap();
+			let mut from = unsafe { fs::File::from_raw_fd(fd) };
+			let mut to = unsafe { fs::File::from_raw_fd(to) };
+			let x = io::Seek::seek(&mut from, io::SeekFrom::Start(0)).unwrap();
 			assert_eq!(x, 0);
-			let _ = io::copy(&mut &from, &mut &to).unwrap(); // copyfile?
+			let _ = io::copy(&mut from, &mut to).unwrap(); // copyfile?
 			assert_eq!(from.metadata().unwrap().len(), to.metadata().unwrap().len());
+			let x = io::Seek::seek(&mut from, io::SeekFrom::Start(0)).unwrap();
+			assert_eq!(x, 0);
 			let (read, write) = pipe(fcntl::OFlag::O_CLOEXEC).unwrap();
 			if let unistd::ForkResult::Parent { .. } = unistd::fork().expect("Fork failed") {
 				unistd::close(read).unwrap();
@@ -418,17 +420,22 @@ pub fn fexecve(fd: Fd, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infallible
 	}
 }
 
-/// Loops `io::copy` till len elapsed or error
+/// `io::copy` till len elapsed or error
 pub fn copy<R: ?Sized, W: ?Sized>(reader: &mut R, writer: &mut W, len: u64) -> io::Result<()>
 where
 	R: Read,
 	W: Write,
 {
-	let mut offset = 0;
-	while offset != len {
-		offset += io::copy(&mut reader.take(len - offset), writer)?;
-	}
-	Ok(())
+	io::copy(&mut reader.take(len), writer).and_then(|written| {
+		if written == len {
+			Ok(())
+		} else {
+			Err(io::Error::new(
+				io::ErrorKind::UnexpectedEof,
+				"copy couldn't finish",
+			))
+		}
+	})
 }
 
 /// Loops `sendfile` till len elapsed or error
@@ -447,6 +454,9 @@ pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> nix:
 			)?;
 			let n: u64 = n.try_into().unwrap();
 			assert!(n <= len - offset);
+			if n == 0 {
+				return Err(nix::Error::Sys(nix::errno::Errno::ENODATA));
+			}
 			offset += n;
 		}
 		Ok(())
@@ -467,6 +477,9 @@ pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> nix:
 			result?;
 			let n: u64 = n.try_into().unwrap();
 			assert!(n <= len - offset);
+			if n == 0 {
+				return Err(nix::Error::Sys(nix::errno::Errno::ENODATA));
+			}
 			offset += n;
 		}
 		Ok(())
@@ -489,6 +502,9 @@ pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> nix:
 			result?;
 			let n: u64 = n.try_into().unwrap();
 			assert!(n <= len - offset);
+			if n == 0 {
+				return Err(nix::Error::Sys(nix::errno::Errno::ENODATA));
+			}
 			offset += n;
 		}
 		Ok(())
@@ -523,6 +539,12 @@ pub fn copy_splice<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> nix::R
 		)?;
 		let n: u64 = n.try_into().unwrap();
 		assert!(n <= len - offset);
+		if n == 0 {
+			return Err(io::Error::new(
+				io::ErrorKind::UnexpectedEof,
+				"copy_sendfile couldn't finish",
+			));
+		}
 		offset += n;
 	}
 	Ok(())
