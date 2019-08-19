@@ -454,7 +454,7 @@ pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> nix:
 			let n: u64 = n.try_into().unwrap();
 			assert!(n <= len - offset);
 			if n == 0 {
-				return Err(nix::Error::Sys(nix::errno::Errno::ENODATA));
+				return Err(nix::Error::Sys(nix::errno::Errno::EIO));
 			}
 			offset += n;
 		}
@@ -477,7 +477,7 @@ pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> nix:
 			let n: u64 = n.try_into().unwrap();
 			assert!(n <= len - offset);
 			if n == 0 {
-				return Err(nix::Error::Sys(nix::errno::Errno::ENODATA));
+				return Err(nix::Error::Sys(nix::errno::Errno::EIO));
 			}
 			offset += n;
 		}
@@ -502,7 +502,7 @@ pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> nix:
 			let n: u64 = n.try_into().unwrap();
 			assert!(n <= len - offset);
 			if n == 0 {
-				return Err(nix::Error::Sys(nix::errno::Errno::ENODATA));
+				return Err(nix::Error::Sys(nix::errno::Errno::EIO));
 			}
 			offset += n;
 		}
