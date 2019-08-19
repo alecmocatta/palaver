@@ -15,7 +15,7 @@ use nix::{errno, fcntl, sys::stat, unistd};
 use std::convert::TryInto;
 #[cfg(unix)]
 use std::{
-	convert::Infallible, ffi::{CStr, CString, OsString}, fs, iter, mem, os::unix::ffi::OsStringExt, os::unix::io::AsRawFd, os::unix::io::FromRawFd
+	convert::Infallible, ffi::{CStr, CString, OsString}, fs, iter, os::unix::ffi::OsStringExt, os::unix::io::AsRawFd, os::unix::io::FromRawFd
 };
 use std::{
 	fmt, io::{self, Read, Write}, path
@@ -292,7 +292,7 @@ where
 fn tmpfile(
 	prefix: &heapless::String<heapless::consts::U6>,
 ) -> heapless::String<typenum::operator_aliases::Sum<heapless::consts::U6, heapless::consts::U32>> {
-	let mut random: [u8; 16] = unsafe { mem::uninitialized() };
+	let mut random: [u8; 16] = [0; 16];
 	// thread_rng uses tls, might permanently open /dev/urandom, which may have undesirable side effects
 	// let rand = fs::File::open("/dev/urandom").expect("Couldn't open /dev/urandom");
 	let rand = nix::fcntl::open(

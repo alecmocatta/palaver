@@ -29,14 +29,13 @@ pub fn gettid() -> u64 {
 	}
 	#[cfg(any(target_os = "macos", target_os = "ios"))]
 	{
-		use std::mem;
 		// https://github.com/google/xi-editor/blob/346bfe2d96f412cca5c8aa858287730f5ed521c3/rust/trace/src/sys_tid.rs
 		// or mach_thread_self ?
 		#[link(name = "pthread")]
 		extern "C" {
 			fn pthread_threadid_np(thread: libc::pthread_t, thread_id: *mut u64) -> libc::c_int;
 		}
-		let mut tid: u64 = unsafe { mem::uninitialized() };
+		let mut tid: u64 = 0;
 		let err = unsafe { pthread_threadid_np(0, &mut tid) };
 		assert_eq!(err, 0);
 		tid
