@@ -371,8 +371,8 @@ pub fn fexecve(fd: Fd, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infallible
 				stat::Mode::S_IRWXU,
 			)
 			.map(|fd| {
-				if true {
-					// cloexec
+				let cloexec = true;
+				if cloexec {
 					let mut flags_ = fcntl::FdFlag::from_bits(
 						fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap(),
 					)
@@ -386,10 +386,12 @@ pub fn fexecve(fd: Fd, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infallible
 			let mut from = unsafe { fs::File::from_raw_fd(fd) };
 			let mut to = unsafe { fs::File::from_raw_fd(to) };
 			let pos = io::Seek::seek(&mut from, io::SeekFrom::Current(0)).unwrap();
+			let x = io::Seek::seek(&mut from, io::SeekFrom::Start(0)).unwrap();
+			assert_eq!(x, 0);
 			let _ = io::copy(&mut from, &mut to).unwrap(); // copyfile?
-			assert_eq!(from.metadata().unwrap().len(), to.metadata().unwrap().len());
 			let x = io::Seek::seek(&mut from, io::SeekFrom::Start(pos)).unwrap();
 			assert_eq!(x, pos);
+			assert_eq!(from.metadata().unwrap().len(), to.metadata().unwrap().len());
 			let (read, write) = pipe(fcntl::OFlag::O_CLOEXEC).unwrap();
 			if let unistd::ForkResult::Parent { .. } = unistd::fork().expect("Fork failed") {
 				unistd::close(read).unwrap();
@@ -641,14 +643,6 @@ pub fn fd_path_heapless(fd: Fd) -> io::Result<heapless::String<heapless::consts:
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-// http://man7.org/linux/man-pages/man2/getdents.2.html
-// https://play.rust-lang.org/?version=stable&mode=debug&edition=2018&gist=02133070306513c9e45603f8ba05f181
-// https://opensource.apple.com/source/Libc/Libc-1272.200.26/gen/FreeBSD/readdir.c.auto.html
-// https://github.com/search?q=__getdirentries64&type=Code
-// https://www.freebsd.org/cgi/man.cgi?query=getdirentries&sektion=2&apropos=0&manpath=freebsd
-// https://www.unix.com/man-page/osx/2/getdirentries/
-// https://github.com/redox-os/relibc/blob/a8280e899161e39717ce2cdc5e2a42eb4f8b0679/src/header/dirent/mod.rs
 
 /// Iterator for all open file descriptors. Doesn't work on Windows.
 ///
