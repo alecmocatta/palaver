@@ -539,10 +539,7 @@ pub fn copy_splice<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> nix::R
 		let n: u64 = n.try_into().unwrap();
 		assert!(n <= len - offset);
 		if n == 0 {
-			return Err(io::Error::new(
-				io::ErrorKind::UnexpectedEof,
-				"copy_sendfile couldn't finish",
-			));
+			return Err(nix::Error::Sys(nix::errno::Errno::EIO));
 		}
 		offset += n;
 	}
@@ -644,6 +641,14 @@ pub fn fd_path_heapless(fd: Fd) -> io::Result<heapless::String<heapless::consts:
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// http://man7.org/linux/man-pages/man2/getdents.2.html
+// https://play.rust-lang.org/?version=stable&mode=debug&edition=2018&gist=02133070306513c9e45603f8ba05f181
+// https://opensource.apple.com/source/Libc/Libc-1272.200.26/gen/FreeBSD/readdir.c.auto.html
+// https://github.com/search?q=__getdirentries64&type=Code
+// https://www.freebsd.org/cgi/man.cgi?query=getdirentries&sektion=2&apropos=0&manpath=freebsd
+// https://www.unix.com/man-page/osx/2/getdirentries/
+// https://github.com/redox-os/relibc/blob/a8280e899161e39717ce2cdc5e2a42eb4f8b0679/src/header/dirent/mod.rs
 
 /// Iterator for all open file descriptors. Doesn't work on Windows.
 ///
