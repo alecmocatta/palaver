@@ -385,12 +385,11 @@ pub fn fexecve(fd: Fd, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infallible
 			.unwrap();
 			let mut from = unsafe { fs::File::from_raw_fd(fd) };
 			let mut to = unsafe { fs::File::from_raw_fd(to) };
-			let x = io::Seek::seek(&mut from, io::SeekFrom::Start(0)).unwrap();
-			assert_eq!(x, 0);
+			let pos = io::Seek::seek(&mut from, io::SeekFrom::Current(0)).unwrap();
 			let _ = io::copy(&mut from, &mut to).unwrap(); // copyfile?
 			assert_eq!(from.metadata().unwrap().len(), to.metadata().unwrap().len());
-			let x = io::Seek::seek(&mut from, io::SeekFrom::Start(0)).unwrap();
-			assert_eq!(x, 0);
+			let x = io::Seek::seek(&mut from, io::SeekFrom::Start(pos)).unwrap();
+			assert_eq!(x, pos);
 			let (read, write) = pipe(fcntl::OFlag::O_CLOEXEC).unwrap();
 			if let unistd::ForkResult::Parent { .. } = unistd::fork().expect("Fork failed") {
 				unistd::close(read).unwrap();
