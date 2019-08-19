@@ -68,7 +68,7 @@ pub fn seal_fd(fd: Fd) {
 
 /// Duplicate a file descriptor. Flags are passed atomically. `flags` being `None` copies the flags from `oldfd`.
 #[cfg(unix)]
-pub fn dup_fd(oldfd: Fd, flags: Option<fcntl::FdFlag>) -> Result<Fd, nix::Error> {
+pub fn dup_fd(oldfd: Fd, flags: Option<fcntl::FdFlag>) -> nix::Result<Fd> {
 	let flags = flags.unwrap_or_else(|| {
 		fcntl::FdFlag::from_bits(fcntl::fcntl(oldfd, fcntl::FcntlArg::F_GETFD).unwrap()).unwrap()
 	});
@@ -90,7 +90,7 @@ pub fn dup_fd(oldfd: Fd, flags: Option<fcntl::FdFlag>) -> Result<Fd, nix::Error>
 #[cfg(unix)]
 pub fn move_fd(
 	oldfd: Fd, newfd: Fd, flags: Option<fcntl::FdFlag>, allow_nonexistent: bool,
-) -> Result<(), nix::Error> {
+) -> nix::Result<()> {
 	copy_fd(oldfd, newfd, flags, allow_nonexistent).and_then(|()| unistd::close(oldfd))
 }
 
@@ -98,7 +98,7 @@ pub fn move_fd(
 #[cfg(unix)]
 pub fn copy_fd(
 	oldfd: Fd, newfd: Fd, flags: Option<fcntl::FdFlag>, allow_nonexistent: bool,
-) -> Result<(), nix::Error> {
+) -> nix::Result<()> {
 	if !allow_nonexistent {
 		let _ = fcntl::fcntl(newfd, fcntl::FcntlArg::F_GETFD).unwrap();
 	}
@@ -129,7 +129,7 @@ pub fn copy_fd(
 
 /// Like pipe2; not atomic on platforms that lack it
 #[cfg(unix)]
-pub fn pipe(flags: fcntl::OFlag) -> Result<(Fd, Fd), nix::Error> {
+pub fn pipe(flags: fcntl::OFlag) -> nix::Result<(Fd, Fd)> {
 	#[cfg(any(
 		target_os = "android",
 		target_os = "dragonfly",
@@ -178,7 +178,7 @@ pub fn pipe(flags: fcntl::OFlag) -> Result<(Fd, Fd), nix::Error> {
 
 /// Falls back to shm_open, falls back to creating+unlinking /tmp/{random_filename}
 #[cfg(unix)]
-pub fn memfd_create(name: &CStr, cloexec: bool) -> Result<Fd, nix::Error> {
+pub fn memfd_create(name: &CStr, cloexec: bool) -> nix::Result<Fd> {
 	let ret = {
 		#[cfg(any(target_os = "android", target_os = "linux"))]
 		{
@@ -419,7 +419,7 @@ where
 
 /// Loops `sendfile` till len elapsed or error
 #[cfg(unix)]
-pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Result<(), nix::Error> {
+pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> nix::Result<()> {
 	#[cfg(any(target_os = "android", target_os = "linux"))]
 	{
 		use nix::sys::sendfile;
@@ -496,7 +496,7 @@ pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Resu
 
 /// Loops `splice` till len elapsed or error
 #[cfg(any(target_os = "android", target_os = "linux"))]
-pub fn copy_splice<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Result<(), nix::Error> {
+pub fn copy_splice<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> nix::Result<()> {
 	let mut offset = 0;
 	while offset != len {
 		let n = fcntl::splice(

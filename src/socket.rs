@@ -21,7 +21,7 @@ bitflags::bitflags! {
 #[cfg(unix)]
 pub fn socket<T: Into<Option<socket::SockProtocol>>>(
 	domain: socket::AddressFamily, ty: socket::SockType, flags: SockFlag, protocol: T,
-) -> Result<Fd, nix::Error> {
+) -> nix::Result<Fd> {
 	let mut flags_ = socket::SockFlag::empty();
 	flags_ = flags_;
 	#[cfg(any(
@@ -75,7 +75,7 @@ pub fn socket<T: Into<Option<socket::SockProtocol>>>(
 }
 /// Like accept4, falls back to non-atomic accept
 #[cfg(unix)]
-pub fn accept(sockfd: Fd, flags: SockFlag) -> Result<Fd, nix::Error> {
+pub fn accept(sockfd: Fd, flags: SockFlag) -> nix::Result<Fd> {
 	#[cfg(any(
 		target_os = "android",
 		target_os = "freebsd",
