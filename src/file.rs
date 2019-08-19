@@ -13,12 +13,12 @@ use nix::{errno, fcntl, sys::stat, unistd};
 	target_os = "freebsd"
 ))]
 use std::convert::TryInto;
-use std::{
-	convert::Infallible, fmt, io::{self, Read, Write}, iter, path
-};
 #[cfg(unix)]
 use std::{
-	ffi::{CStr, CString, OsString}, fs, mem, os::unix::ffi::OsStringExt, os::unix::io::AsRawFd, os::unix::io::FromRawFd
+	convert::Infallible, ffi::{CStr, CString, OsString}, fs, iter, mem, os::unix::ffi::OsStringExt, os::unix::io::AsRawFd, os::unix::io::FromRawFd
+};
+use std::{
+	fmt, io::{self, Read, Write}, path
 };
 
 /// Maps file descriptors [(from,to)]
@@ -279,6 +279,7 @@ pub fn execve(path: &CStr, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infall
 	Err(nix::Error::Sys(nix::errno::Errno::last()))
 }
 
+#[cfg(unix)]
 fn heapless_string_to_cstr<N>(string: &mut heapless::String<N>) -> &CStr
 where
 	N: heapless::ArrayLength<u8>,
@@ -310,10 +311,23 @@ fn tmpfile(
 
 /// Falls back to execve("/proc/self/fd/{fd}",...), falls back to execve("/tmp/{randomfilename}")
 #[cfg(unix)]
-pub fn fexecve(fd: Fd, arg: &[&CStr], env: &[&CStr]) -> nix::Result<Infallible> {
+pub fn fexecve(fd: Fd, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infallible> {
 	#[cfg(any(target_os = "android", target_os = "freebsd", target_os = "linux"))]
 	{
-		unistd::fexecve(fd, arg, env)
+		let args: heapless::Vec<*const libc::c_char, heapless::consts::U256> = args
+			.iter()
+			.map(|arg| arg.as_ptr())
+			.chain(iter::once(std::ptr::null()))
+			.collect();
+		let vars: heapless::Vec<*const libc::c_char, heapless::consts::U256> = vars
+			.iter()
+			.map(|arg| arg.as_ptr())
+			.chain(iter::once(std::ptr::null()))
+			.collect();
+
+		let _ = unsafe { libc::fexecve(fd, args.as_ptr(), vars.as_ptr()) };
+
+		Err(nix::Error::Sys(nix::errno::Errno::last()))
 	}
 	#[cfg(all(
 		unix,
@@ -348,7 +362,7 @@ pub fn fexecve(fd: Fd, arg: &[&CStr], env: &[&CStr]) -> nix::Result<Infallible> 
 
 		let mut path = fd_path_heapless(fd).unwrap();
 		let path = heapless_string_to_cstr(&mut path);
-		execve(&path, arg, env).or_else(|_e| {
+		execve(&path, args, vars).or_else(|_e| {
 			let mut to_path = tmpfile(&"/tmp/".into());
 			let to_path = heapless_string_to_cstr(&mut to_path);
 			let to = fcntl::open(
@@ -378,7 +392,7 @@ pub fn fexecve(fd: Fd, arg: &[&CStr], env: &[&CStr]) -> nix::Result<Infallible> 
 			let (read, write) = pipe(fcntl::OFlag::O_CLOEXEC).unwrap();
 			if let unistd::ForkResult::Parent { .. } = unistd::fork().expect("Fork failed") {
 				unistd::close(read).unwrap();
-				execve(to_path, arg, env).map_err(|e| {
+				execve(to_path, args, vars).map_err(|e| {
 					let _ = unistd::write(write, &[0]).unwrap();
 					unistd::close(write).unwrap();
 					unistd::unlink(to_path).unwrap();
@@ -571,7 +585,8 @@ pub fn fd_path(fd: Fd) -> io::Result<path::PathBuf> {
 }
 
 /// Returns the path of the entry for a particular open file descriptor. On Linux this is `/proc/self/fd/{fd}`. Doesn't work on Windows.
-fn fd_path_heapless(fd: Fd) -> io::Result<heapless::String<heapless::consts::U24>> {
+#[doc(hidden)]
+pub fn fd_path_heapless(fd: Fd) -> io::Result<heapless::String<heapless::consts::U24>> {
 	let mut ret = heapless::String::new();
 	#[cfg(any(target_os = "android", target_os = "linux"))]
 	{
@@ -597,12 +612,13 @@ fn fd_path_heapless(fd: Fd) -> io::Result<heapless::String<heapless::consts::U24
 		target_os = "ios"
 	)))]
 	{
-		let _ = fd;
+		let _ = (fd, &mut ret);
 		return Err(io::Error::new(
 			io::ErrorKind::NotFound,
 			"no known /proc/self/fd equivalent for OS",
 		));
 	}
+	#[allow(unreachable_code)]
 	Ok(ret)
 }
 
