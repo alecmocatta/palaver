@@ -2,23 +2,32 @@
 
 use super::*;
 use nix::{errno, libc};
-use std::{convert::TryInto, mem};
+use std::convert::TryInto;
 
 #[cfg(all(target_os = "linux", not(target_env = "musl")))]
-fn getrlimit(resource: libc::__rlimit_resource_t) -> Result<libc::rlimit64, nix::Error> {
-	let mut rlim: libc::rlimit64 = unsafe { mem::uninitialized() };
+fn getrlimit(resource: libc::__rlimit_resource_t) -> nix::Result<libc::rlimit64> {
+	let mut rlim = libc::rlimit64 {
+		rlim_cur: 0,
+		rlim_max: 0,
+	};
 	let err = unsafe { libc::getrlimit64(resource, &mut rlim) };
 	errno::Errno::result(err).map(|_| rlim)
 }
 #[cfg(any(target_os = "android", target_env = "musl"))]
-fn getrlimit(resource: libc::c_int) -> Result<libc::rlimit64, nix::Error> {
-	let mut rlim: libc::rlimit64 = unsafe { mem::uninitialized() };
+fn getrlimit(resource: libc::c_int) -> nix::Result<libc::rlimit64> {
+	let mut rlim = libc::rlimit64 {
+		rlim_cur: 0,
+		rlim_max: 0,
+	};
 	let err = unsafe { libc::getrlimit64(resource, &mut rlim) };
 	errno::Errno::result(err).map(|_| rlim)
 }
 #[cfg(all(unix, not(any(target_os = "android", target_os = "linux"))))]
-fn getrlimit(resource: libc::c_int) -> Result<libc::rlimit, nix::Error> {
-	let mut rlim: libc::rlimit = unsafe { mem::uninitialized() };
+fn getrlimit(resource: libc::c_int) -> nix::Result<libc::rlimit> {
+	let mut rlim = libc::rlimit {
+		rlim_cur: 0,
+		rlim_max: 0,
+	};
 	let err = unsafe { libc::getrlimit(resource, &mut rlim) };
 	errno::Errno::result(err).map(|_| rlim)
 }

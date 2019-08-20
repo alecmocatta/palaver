@@ -15,7 +15,7 @@ use nix::{errno, fcntl, sys::stat, unistd};
 use std::convert::TryInto;
 #[cfg(unix)]
 use std::{
-	ffi::{CStr, CString, OsString}, fs, mem, os::unix::ffi::OsStringExt, os::unix::io::AsRawFd
+	convert::Infallible, ffi::{CStr, CString, OsString}, fs, iter, os::unix::ffi::OsStringExt, os::unix::io::AsRawFd, os::unix::io::FromRawFd
 };
 use std::{
 	fmt, io::{self, Read, Write}, path
@@ -68,7 +68,7 @@ pub fn seal_fd(fd: Fd) {
 
 /// Duplicate a file descriptor. Flags are passed atomically. `flags` being `None` copies the flags from `oldfd`.
 #[cfg(unix)]
-pub fn dup_fd(oldfd: Fd, flags: Option<fcntl::FdFlag>) -> Result<Fd, nix::Error> {
+pub fn dup_fd(oldfd: Fd, flags: Option<fcntl::FdFlag>) -> nix::Result<Fd> {
 	let flags = flags.unwrap_or_else(|| {
 		fcntl::FdFlag::from_bits(fcntl::fcntl(oldfd, fcntl::FcntlArg::F_GETFD).unwrap()).unwrap()
 	});
@@ -90,7 +90,7 @@ pub fn dup_fd(oldfd: Fd, flags: Option<fcntl::FdFlag>) -> Result<Fd, nix::Error>
 #[cfg(unix)]
 pub fn move_fd(
 	oldfd: Fd, newfd: Fd, flags: Option<fcntl::FdFlag>, allow_nonexistent: bool,
-) -> Result<(), nix::Error> {
+) -> nix::Result<()> {
 	copy_fd(oldfd, newfd, flags, allow_nonexistent).and_then(|()| unistd::close(oldfd))
 }
 
@@ -98,7 +98,7 @@ pub fn move_fd(
 #[cfg(unix)]
 pub fn copy_fd(
 	oldfd: Fd, newfd: Fd, flags: Option<fcntl::FdFlag>, allow_nonexistent: bool,
-) -> Result<(), nix::Error> {
+) -> nix::Result<()> {
 	if !allow_nonexistent {
 		let _ = fcntl::fcntl(newfd, fcntl::FcntlArg::F_GETFD).unwrap();
 	}
@@ -129,7 +129,7 @@ pub fn copy_fd(
 
 /// Like pipe2; not atomic on platforms that lack it
 #[cfg(unix)]
-pub fn pipe(flags: fcntl::OFlag) -> Result<(Fd, Fd), nix::Error> {
+pub fn pipe(flags: fcntl::OFlag) -> nix::Result<(Fd, Fd)> {
 	#[cfg(any(
 		target_os = "android",
 		target_os = "dragonfly",
@@ -178,7 +178,7 @@ pub fn pipe(flags: fcntl::OFlag) -> Result<(Fd, Fd), nix::Error> {
 
 /// Falls back to shm_open, falls back to creating+unlinking /tmp/{random_filename}
 #[cfg(unix)]
-pub fn memfd_create(name: &CStr, cloexec: bool) -> Result<Fd, nix::Error> {
+pub fn memfd_create(name: &CStr, cloexec: bool) -> nix::Result<Fd> {
 	let ret = {
 		#[cfg(any(target_os = "android", target_os = "linux"))]
 		{
@@ -208,14 +208,10 @@ pub fn memfd_create(name: &CStr, cloexec: bool) -> Result<Fd, nix::Error> {
 	#[cfg(all(unix, not(any(target_os = "ios", target_os = "macos"))))] // can't read/write on mac
 	let ret = ret.or_else(|_e| {
 		use nix::sys::mman;
-		let mut random: [u8; 16] = unsafe { mem::uninitialized() }; // ENAMETOOLONG on mac for 16
-															// thread_rng uses getrandom(2) on >=3.17 (same as memfd_create), permanently opens /dev/urandom on fail, which messes our fd numbers. TODO: less assumptive about fd numbers..
-		let rand = fs::File::open("/dev/urandom").expect("Couldn't open /dev/urandom");
-		(&rand).read_exact(&mut random).unwrap();
-		drop(rand);
-		let name = path::PathBuf::from(format!("/{}", random.to_hex()));
+		let mut name = tmpfile(&"/".into()); // ENAMETOOLONG on mac for >31 byte path component https://github.com/apple/darwin-xnu/blob/a449c6a3b8014d9406c2ddbdc81795da24aa7443/bsd/kern/posix_shm.c#L94
+		let name = heapless_string_to_cstr(&mut name);
 		mman::shm_open(
-			&name,
+			name,
 			fcntl::OFlag::O_RDWR | fcntl::OFlag::O_CREAT | fcntl::OFlag::O_EXCL,
 			stat::Mode::S_IRWXU,
 		)
@@ -227,22 +223,22 @@ pub fn memfd_create(name: &CStr, cloexec: bool) -> Result<Fd, nix::Error> {
 				flags_.remove(fcntl::FdFlag::FD_CLOEXEC);
 				let _ = fcntl::fcntl(fd, fcntl::FcntlArg::F_SETFD(flags_)).unwrap();
 			}
-			mman::shm_unlink(&name).unwrap();
+			mman::shm_unlink(name).unwrap();
 			fd
 		})
 	});
 	#[cfg(unix)]
 	{
 		ret.or_else(|_e| {
-			let mut random: [u8; 16] = unsafe { mem::uninitialized() };
-			// thread_rng uses getrandom(2) on >=3.17 (same as memfd_create), permanently opens /dev/urandom on fail, which messes our fd numbers. TODO: less assumptive about fd numbers..
-			let rand = fs::File::open("/dev/urandom").expect("Couldn't open /dev/urandom");
-			(&rand).read_exact(&mut random).unwrap();
-			drop(rand);
-			let name = path::PathBuf::from(format!("/tmp/{}_XXXXXX", random.to_hex()));
-			unistd::mkstemp(&name).map(|(fd, path)| {
-				unistd::unlink(path.as_path()).unwrap();
-				stat::fchmod(fd, stat::Mode::S_IRWXU).unwrap();
+			let mut name = tmpfile(&"/tmp/".into());
+			let name = heapless_string_to_cstr(&mut name);
+			fcntl::open(
+				name,
+				fcntl::OFlag::O_RDWR | fcntl::OFlag::O_CREAT | fcntl::OFlag::O_EXCL,
+				stat::Mode::S_IRWXU,
+			)
+			.map(|fd| {
+				unistd::unlink(name).unwrap();
 				if cloexec {
 					let mut flags_ = fcntl::FdFlag::from_bits(
 						fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap(),
@@ -264,78 +260,155 @@ pub fn memfd_create(name: &CStr, cloexec: bool) -> Result<Fd, nix::Error> {
 	}
 }
 
+/// `execve`, not requiring memory allocation unlike nix's, but panics on >255 args or vars.
+#[cfg(unix)]
+pub fn execve(path: &CStr, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infallible> {
+	let args: heapless::Vec<*const libc::c_char, heapless::consts::U256> = args
+		.iter()
+		.map(|arg| arg.as_ptr())
+		.chain(iter::once(std::ptr::null()))
+		.collect();
+	let vars: heapless::Vec<*const libc::c_char, heapless::consts::U256> = vars
+		.iter()
+		.map(|arg| arg.as_ptr())
+		.chain(iter::once(std::ptr::null()))
+		.collect();
+
+	let _ = unsafe { libc::execve(path.as_ptr(), args.as_ptr(), vars.as_ptr()) };
+
+	Err(nix::Error::Sys(nix::errno::Errno::last()))
+}
+
+#[cfg(unix)]
+fn heapless_string_to_cstr<N>(string: &mut heapless::String<N>) -> &CStr
+where
+	N: heapless::ArrayLength<u8>,
+{
+	string.push('\0').unwrap();
+	CStr::from_bytes_with_nul(string.as_bytes()).unwrap()
+}
+
+#[cfg(unix)]
+fn tmpfile(
+	prefix: &heapless::String<heapless::consts::U6>,
+) -> heapless::String<typenum::operator_aliases::Sum<heapless::consts::U6, heapless::consts::U32>> {
+	let mut random: [u8; 16] = [0; 16];
+	// thread_rng uses tls, might permanently open /dev/urandom, which may have undesirable side effects
+	// let rand = fs::File::open("/dev/urandom").expect("Couldn't open /dev/urandom");
+	let rand = nix::fcntl::open(
+		"/dev/urandom",
+		nix::fcntl::OFlag::O_RDONLY,
+		nix::sys::stat::Mode::empty(),
+	)
+	.expect("Couldn't open /dev/urandom");
+	let rand = unsafe { fs::File::from_raw_fd(rand) };
+	(&rand).read_exact(&mut random).unwrap();
+	drop(rand);
+	let mut ret = heapless::String::new();
+	std::fmt::Write::write_fmt(&mut ret, format_args!("{}{}", prefix, random.to_hex())).unwrap();
+	ret
+}
+
 /// Falls back to execve("/proc/self/fd/{fd}",...), falls back to execve("/tmp/{randomfilename}")
 #[cfg(unix)]
-pub fn fexecve(fd: Fd, arg: &[CString], env: &[CString]) -> Result<void::Void, nix::Error> {
+pub fn fexecve(fd: Fd, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infallible> {
 	#[cfg(any(target_os = "android", target_os = "freebsd", target_os = "linux"))]
 	{
-		unistd::fexecve(fd, arg, env)
+		let args: heapless::Vec<*const libc::c_char, heapless::consts::U256> = args
+			.iter()
+			.map(|arg| arg.as_ptr())
+			.chain(iter::once(std::ptr::null()))
+			.collect();
+		let vars: heapless::Vec<*const libc::c_char, heapless::consts::U256> = vars
+			.iter()
+			.map(|arg| arg.as_ptr())
+			.chain(iter::once(std::ptr::null()))
+			.collect();
+
+		let _ = unsafe { libc::fexecve(fd, args.as_ptr(), vars.as_ptr()) };
+
+		Err(nix::Error::Sys(nix::errno::Errno::last()))
 	}
 	#[cfg(all(
 		unix,
 		not(any(target_os = "android", target_os = "freebsd", target_os = "linux"))
 	))]
 	{
-		use std::{os::unix::io::FromRawFd, process};
-		unistd::execve(
-			&CString::new(<OsString as OsStringExt>::into_vec(
-				fd_path(fd).unwrap().into(),
-			))
-			.unwrap(),
-			arg,
-			env,
-		)
-		.or_else(|_e| {
-			let mut random: [u8; 16] = unsafe { mem::uninitialized() };
-			// thread_rng uses getrandom(2) on >=3.17 (same as memfd_create), permanently opens /dev/urandom on fail, which messes our fd numbers. TODO: less assumptive about fd numbers..
-			let rand = fs::File::open("/dev/urandom").expect("Couldn't open /dev/urandom");
-			(&rand).read_exact(&mut random).unwrap();
-			drop(rand);
-			let name = path::PathBuf::from(format!("/tmp/{}_XXXXXX", random.to_hex()));
-			let (to, to_path) = unistd::mkstemp(&name)
-				.map(|(fd, path)| {
-					stat::fchmod(fd, stat::Mode::S_IRWXU).unwrap();
-					if true {
-						// cloexec
-						let mut flags_ = fcntl::FdFlag::from_bits(
-							fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap(),
-						)
-						.unwrap();
-						flags_.insert(fcntl::FdFlag::FD_CLOEXEC);
-						let _ = fcntl::fcntl(fd, fcntl::FcntlArg::F_SETFD(flags_)).unwrap();
-					}
-					(fd, path)
-				})
-				.unwrap();
-			let from = unsafe { fs::File::from_raw_fd(fd) };
-			let to = unsafe { fs::File::from_raw_fd(to) };
-			let x = unistd::lseek(from.as_raw_fd(), 0, unistd::Whence::SeekSet).unwrap();
+		// Things tried but not helping on Mac:
+		// extern "C" {
+		// 	#[cfg_attr(
+		// 		all(target_os = "macos", target_arch = "x86"),
+		// 		link_name = "lchmod$UNIX2003"
+		// 	)]
+		// 	pub fn lchmod(path: *const libc::c_char, mode: libc::mode_t) -> libc::c_int;
+		// }
+		// let res = unsafe { libc::fchmod(fd, stat::Mode::S_IRWXU.bits() as libc::mode_t) };
+		// assert_eq!(res, 0);
+		// nix::errno::Errno::result(res).map(drop).unwrap();
+		// const O_SYMLINK: i32 = 0x200000;
+		// let x = unsafe { libc::open(path.as_ptr(), O_SYMLINK) };
+		// assert_ne!(x, -1);
+		// let res = unsafe { libc::fchmod(x, stat::Mode::S_IRWXU.bits() as libc::mode_t) };
+		// assert_eq!(res, 0);
+		// nix::errno::Errno::result(res).map(drop).unwrap();
+		// let res = unsafe { lchmod(path.as_ptr(), stat::Mode::S_IRWXU.bits() as libc::mode_t) };
+		// assert_eq!(res, 0);
+		// nix::errno::Errno::result(res).map(drop).unwrap();
+		// println!("{:?}", nix::sys::stat::stat(&*path).unwrap());
+		// println!("{:?}", nix::sys::stat::lstat(&*path).unwrap());
+		// let to_path_cstr = CString::new(<OsString as OsStringExt>::into_vec(to_path.clone().into())).unwrap();
+		// let res = unsafe { libc::linkat(libc::AT_FDCWD, to_path_cstr.as_ptr(), libc::AT_FDCWD, path.as_ptr(), libc::AT_SYMLINK_FOLLOW) };
+		// nix::errno::Errno::result(res).map(drop)?;
+
+		let mut path = fd_path_heapless(fd).unwrap();
+		let path = heapless_string_to_cstr(&mut path);
+		execve(&path, args, vars).or_else(|_e| {
+			let mut to_path = tmpfile(&"/tmp/".into());
+			let to_path = heapless_string_to_cstr(&mut to_path);
+			let to = fcntl::open(
+				to_path,
+				fcntl::OFlag::O_RDWR | fcntl::OFlag::O_CREAT | fcntl::OFlag::O_EXCL,
+				stat::Mode::S_IRWXU,
+			)
+			.map(|fd| {
+				let cloexec = true;
+				if cloexec {
+					let mut flags_ = fcntl::FdFlag::from_bits(
+						fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap(),
+					)
+					.unwrap();
+					flags_.insert(fcntl::FdFlag::FD_CLOEXEC);
+					let _ = fcntl::fcntl(fd, fcntl::FcntlArg::F_SETFD(flags_)).unwrap();
+				}
+				fd
+			})
+			.unwrap();
+			let mut from = unsafe { fs::File::from_raw_fd(fd) };
+			let mut to = unsafe { fs::File::from_raw_fd(to) };
+			let pos = io::Seek::seek(&mut from, io::SeekFrom::Current(0)).unwrap();
+			let x = io::Seek::seek(&mut from, io::SeekFrom::Start(0)).unwrap();
 			assert_eq!(x, 0);
-			let _ = io::copy(&mut &from, &mut &to).unwrap(); // copyfile?
+			let _ = io::copy(&mut from, &mut to).unwrap(); // copyfile?
+			let x = io::Seek::seek(&mut from, io::SeekFrom::Start(pos)).unwrap();
+			assert_eq!(x, pos);
 			assert_eq!(from.metadata().unwrap().len(), to.metadata().unwrap().len());
 			let (read, write) = pipe(fcntl::OFlag::O_CLOEXEC).unwrap();
 			if let unistd::ForkResult::Parent { .. } = unistd::fork().expect("Fork failed") {
 				unistd::close(read).unwrap();
-				unistd::execve(
-					&CString::new(<OsString as OsStringExt>::into_vec(to_path.clone().into()))
-						.unwrap(),
-					arg,
-					env,
-				)
-				.map_err(|e| {
+				execve(to_path, args, vars).map_err(|e| {
 					let _ = unistd::write(write, &[0]).unwrap();
 					unistd::close(write).unwrap();
-					unistd::unlink(to_path.as_path()).unwrap();
+					unistd::unlink(to_path).unwrap();
 					e
 				})
 			} else {
 				unistd::close(write).unwrap();
 				match unistd::read(read, &mut [0, 0]) {
-					Ok(1) => process::exit(0),
+					Ok(1) => unsafe { libc::_exit(0) },
 					Ok(0) => {
 						// constellation currently relies upon current_exe() on mac not having been deleted
 						// unistd::unlink(to_path.as_path()).unwrap();
-						process::exit(0)
+						unsafe { libc::_exit(0) }
 					}
 					e => panic!("{:?}", e),
 				}
@@ -348,22 +421,27 @@ pub fn fexecve(fd: Fd, arg: &[CString], env: &[CString]) -> Result<void::Void, n
 	}
 }
 
-/// Loops `io::copy` till len elapsed or error
+/// `io::copy` till len elapsed or error
 pub fn copy<R: ?Sized, W: ?Sized>(reader: &mut R, writer: &mut W, len: u64) -> io::Result<()>
 where
 	R: Read,
 	W: Write,
 {
-	let mut offset = 0;
-	while offset != len {
-		offset += io::copy(&mut reader.take(len - offset), writer)?;
-	}
-	Ok(())
+	io::copy(&mut reader.take(len), writer).and_then(|written| {
+		if written == len {
+			Ok(())
+		} else {
+			Err(io::Error::new(
+				io::ErrorKind::UnexpectedEof,
+				"copy couldn't finish",
+			))
+		}
+	})
 }
 
 /// Loops `sendfile` till len elapsed or error
 #[cfg(unix)]
-pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Result<(), nix::Error> {
+pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> nix::Result<()> {
 	#[cfg(any(target_os = "android", target_os = "linux"))]
 	{
 		use nix::sys::sendfile;
@@ -377,6 +455,9 @@ pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Resu
 			)?;
 			let n: u64 = n.try_into().unwrap();
 			assert!(n <= len - offset);
+			if n == 0 {
+				return Err(nix::Error::Sys(nix::errno::Errno::EIO));
+			}
 			offset += n;
 		}
 		Ok(())
@@ -397,6 +478,9 @@ pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Resu
 			result?;
 			let n: u64 = n.try_into().unwrap();
 			assert!(n <= len - offset);
+			if n == 0 {
+				return Err(nix::Error::Sys(nix::errno::Errno::EIO));
+			}
 			offset += n;
 		}
 		Ok(())
@@ -419,6 +503,9 @@ pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Resu
 			result?;
 			let n: u64 = n.try_into().unwrap();
 			assert!(n <= len - offset);
+			if n == 0 {
+				return Err(nix::Error::Sys(nix::errno::Errno::EIO));
+			}
 			offset += n;
 		}
 		Ok(())
@@ -440,7 +527,7 @@ pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Resu
 
 /// Loops `splice` till len elapsed or error
 #[cfg(any(target_os = "android", target_os = "linux"))]
-pub fn copy_splice<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Result<(), nix::Error> {
+pub fn copy_splice<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> nix::Result<()> {
 	let mut offset = 0;
 	while offset != len {
 		let n = fcntl::splice(
@@ -453,6 +540,9 @@ pub fn copy_splice<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> Result
 		)?;
 		let n: u64 = n.try_into().unwrap();
 		assert!(n <= len - offset);
+		if n == 0 {
+			return Err(nix::Error::Sys(nix::errno::Errno::EIO));
+		}
 		offset += n;
 	}
 	Ok(())
@@ -512,6 +602,44 @@ pub fn fd_path(fd: Fd) -> io::Result<path::PathBuf> {
 			"no known /proc/self/fd equivalent for OS",
 		))
 	}
+}
+
+/// Returns the path of the entry for a particular open file descriptor. On Linux this is `/proc/self/fd/{fd}`. Doesn't work on Windows.
+#[doc(hidden)]
+pub fn fd_path_heapless(fd: Fd) -> io::Result<heapless::String<heapless::consts::U24>> {
+	let mut ret = heapless::String::new();
+	#[cfg(any(target_os = "android", target_os = "linux"))]
+	{
+		use std::fmt::Write;
+		ret.write_fmt(format_args!("/proc/self/fd/{}", fd)).unwrap();
+	}
+	#[cfg(any(
+		target_os = "freebsd",
+		target_os = "netbsd",
+		target_os = "macos",
+		target_os = "ios"
+	))]
+	{
+		use std::fmt::Write;
+		ret.write_fmt(format_args!("/dev/fd/{}", fd)).unwrap();
+	}
+	#[cfg(not(any(
+		target_os = "android",
+		target_os = "linux",
+		target_os = "freebsd",
+		target_os = "netbsd",
+		target_os = "macos",
+		target_os = "ios"
+	)))]
+	{
+		let _ = (fd, &mut ret);
+		return Err(io::Error::new(
+			io::ErrorKind::NotFound,
+			"no known /proc/self/fd equivalent for OS",
+		));
+	}
+	#[allow(unreachable_code)]
+	Ok(ret)
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////////

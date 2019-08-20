@@ -1,6 +1,6 @@
 [package]
 name = "palaver"
-version = "0.2.7"
+version = "0.2.8"
 license = "MIT OR Apache-2.0"
 authors = ["Alec Mocatta <alec@mocatta.net>"]
 categories = ["os::unix-apis","os::windows-apis","os::macos-apis"]
@@ -12,7 +12,7 @@ This library attempts to provide reliable polyfills for functionality that isn't
 """
 repository = "https://github.com/alecmocatta/palaver"
 homepage = "https://github.com/alecmocatta/palaver"
-documentation = "https://docs.rs/palaver/0.2.6"
+documentation = "https://docs.rs/palaver/0.2.8"
 readme = "README.md"
 edition = "2018"
 
@@ -24,10 +24,11 @@ maintenance = { status = "actively-developed" }
 nightly = ["valgrind_request"]
 
 [dependencies]
-valgrind_request = { version = "1.1", optional = true }
-void = "1.0"
 bitflags = "1.0"
+heapless = "0.5"
 lazy_static = "1.0"
+typenum = "1.10"
+valgrind_request = { version = "1.1", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.47"
