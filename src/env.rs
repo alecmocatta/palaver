@@ -345,6 +345,7 @@ pub static GRAB_ARGV_ENVP: extern "C" fn(
 	envp: *const *const c_char,
 ) = {
 	// Or should it be an array? https://github.com/rust-lang/rust/pull/39987#issue-107077124 https://doc.rust-lang.org/unstable-book/language-features/used.html
+	#[cfg_attr(target_os = "linux", link_section = ".text.startup")]
 	extern "C" fn grab_argv_envp(
 		_argc: libc::c_int, argv: *const *const c_char, envp: *const *const c_char,
 	) {
