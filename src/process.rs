@@ -1,7 +1,9 @@
 //! Process-related functionality
 
 #[cfg(unix)]
-use nix::libc;
+use nix::{
+	libc, sys::{signal, wait}, unistd::{self, Pid}
+};
 use std::process::Command;
 
 #[cfg(target_os = "freebsd")]
@@ -48,32 +50,71 @@ pub fn count_threads() -> usize {
 #[derive(Debug)]
 pub struct ChildHandle {
 	/// Child Process ID
-	pub child_pid: libc::pid_t,
+	pub pid: Pid,
 	#[cfg(target_os = "freebsd")]
 	/// Child Process Descriptor
-	pub child_pd: Fd,
+	pub pd: Fd,
+}
+
+/// Possible return values from [`ChildHandle::wait`].
+#[derive(Clone, Copy, Debug)]
+pub enum WaitStatus {
+	/// The process exited normally (as with `exit()` or returning from
+	/// `main`) with the given exit code. This case matches the C macro
+	/// `WIFEXITED(status)`; the second field is `WEXITSTATUS(status)`.
+	Exited(i32),
+	/// The process was killed by the given signal. The third field
+	/// indicates whether the signal generated a core dump. This case
+	/// matches the C macro `WIFSIGNALED(status)`; the last two fields
+	/// correspond to `WTERMSIG(status)` and `WCOREDUMP(status)`.
+	Signaled(signal::Signal, bool),
 }
 
 #[cfg(unix)]
 impl ChildHandle {
 	/// Signal the child process
-	#[cfg(unix)]
-	pub fn signal(&self, sig: libc::c_int) -> bool {
+	pub fn wait(&self) -> nix::Result<WaitStatus> {
+		// EVFILT_PROCDESC on freebsd?
+		// linux? https://lwn.net/Articles/773459/
+		loop {
+			match wait::waitpid(self.pid, None) {
+				Ok(wait::WaitStatus::Exited(pid, code)) => {
+					assert_eq!(pid, self.pid);
+					break Ok(WaitStatus::Exited(code));
+				}
+				Ok(wait::WaitStatus::Signaled(pid, signal, dumped)) => {
+					assert_eq!(pid, self.pid);
+					break Ok(WaitStatus::Signaled(signal, dumped));
+				}
+				Ok(_) | Err(nix::Error::Sys(nix::errno::Errno::EINTR)) => (),
+				Err(err) => break Err(err),
+			}
+		}
+	}
+	/// Signal the child process
+	pub fn signal<T: Into<Option<signal::Signal>>>(&self, sig: T) -> nix::Result<()> {
 		#[cfg(target_os = "freebsd")]
-		unsafe {
-			libc::pdkill(self.child_pd, sig) == 0
+		{
+			let res = unsafe {
+				libc::pdkill(
+					self.pd,
+					match signal.into() {
+						Some(s) => s as libc::c_int,
+						None => 0,
+					},
+				)
+			};
+			Errno::result(res).map(drop)
 		}
 		#[cfg(not(target_os = "freebsd"))]
-		unsafe {
-			libc::kill(self.child_pid, sig) == 0
-		}
+		signal::kill(self.pid, sig)
 	}
 }
 
 #[cfg(target_os = "freebsd")]
 impl Drop for ChildHandle {
 	fn drop(&mut self) {
-		let err = unsafe { libc::close(self.child_pd) };
+		let err = unsafe { libc::close(self.pd) };
 		assert_eq!(err, 0);
 	}
 }
@@ -103,8 +144,8 @@ pub enum ForkResult {
 /// match fork().unwrap() {
 ///     ForkResult::Parent(child_proc) => {
 ///         // do stuff
-///         // you can access child_proc.child_pid on any platform
-///         // you can also access child_proc.child_pd on FreeBSD
+///         // you can access child_proc.pid on any platform
+///         // you can also access child_proc.pd on FreeBSD
 ///         if !child_proc.signal(libc::SIGTERM) {
 ///             panic!("sigterm");
 ///         }
@@ -117,9 +158,12 @@ pub enum ForkResult {
 
 // See also https://github.com/qt/qtbase/blob/v5.12.0/src/3rdparty/forkfd/forkfd.c
 #[cfg(unix)]
-pub fn fork() -> Result<ForkResult, ()> {
+pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 	#[cfg(target_os = "freebsd")]
 	{
+		if orphan {
+			unimplemented!();
+		}
 		let mut child_pd = -1;
 		let child_pid = unsafe { libc::pdfork(&mut child_pd, 0) };
 		if child_pid < 0 {
@@ -135,13 +179,54 @@ pub fn fork() -> Result<ForkResult, ()> {
 	}
 	#[cfg(not(target_os = "freebsd"))]
 	{
-		let child_pid = unsafe { libc::fork() };
-		if child_pid < 0 {
-			Err(())
-		} else if child_pid > 0 {
-			Ok(ForkResult::Parent(ChildHandle { child_pid }))
+		if orphan {
+			// inspired by fork2 http://www.faqs.org/faqs/unix-faq/programmer/faq/
+			// TODO: how to make this not racy?
+			let old = unsafe {
+				signal::sigaction(
+					signal::SIGCHLD,
+					&signal::SigAction::new(
+						signal::SigHandler::SigDfl,
+						signal::SaFlags::empty(),
+						signal::SigSet::empty(),
+					),
+				)
+				.unwrap()
+			};
+			let child = if let unistd::ForkResult::Parent { child } = unistd::fork()? {
+				child
+			} else {
+				match unistd::fork() {
+					Ok(unistd::ForkResult::Child) => {
+						let _ = unsafe { signal::sigaction(signal::SIGCHLD, &old).unwrap() };
+						return Ok(ForkResult::Child);
+					}
+					Ok(unistd::ForkResult::Parent { .. }) => unsafe { libc::_exit(0) },
+					Err(_) => unsafe { libc::_exit(1) },
+				}
+			};
+
+			let exit = loop {
+				match nix::sys::wait::waitpid(child, None) {
+					Err(nix::Error::Sys(nix::errno::Errno::EINTR)) => (),
+					exit => break exit,
+				}
+			}
+			.unwrap();
+			let _ = unsafe { signal::sigaction(signal::SIGCHLD, &old).unwrap() };
+			if let nix::sys::wait::WaitStatus::Exited(_, 0) = exit {
+				let pid = Pid::from_raw(i32::max_value()); // TODO!
+				Ok(ForkResult::Parent(ChildHandle { pid }))
+			} else {
+				Err(nix::Error::Sys(nix::errno::Errno::UnknownErrno))
+			}
 		} else {
-			Ok(ForkResult::Child)
+			Ok(match unistd::fork()? {
+				unistd::ForkResult::Child => ForkResult::Child,
+				unistd::ForkResult::Parent { child } => {
+					ForkResult::Parent(ChildHandle { pid: child })
+				}
+			})
 		}
 	}
 }
