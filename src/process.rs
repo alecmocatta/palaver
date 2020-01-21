@@ -182,44 +182,36 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 		if orphan {
 			// inspired by fork2 http://www.faqs.org/faqs/unix-faq/programmer/faq/
 			// TODO: how to make this not racy?
-			let old = unsafe {
-				signal::sigaction(
-					signal::SIGCHLD,
-					&signal::SigAction::new(
-						signal::SigHandler::SigDfl,
-						signal::SaFlags::empty(),
-						signal::SigSet::empty(),
-					),
-				)
-				.unwrap()
-			};
-			let child = if let unistd::ForkResult::Parent { child } = unistd::fork()? {
-				child
-			} else {
-				match unistd::fork() {
-					Ok(unistd::ForkResult::Child) => {
-						let _ = unsafe { signal::sigaction(signal::SIGCHLD, &old).unwrap() };
-						return Ok(ForkResult::Child);
+			let new = signal::SigAction::new(
+				signal::SigHandler::SigDfl,
+				signal::SaFlags::empty(),
+				signal::SigSet::empty(),
+			);
+			let old = unsafe { signal::sigaction(signal::SIGCHLD, &new).unwrap() };
+			let ret = (|| {
+				let child = if let ForkResult::Parent(child) = fork(false)? {
+					child
+				} else {
+					match fork(false) {
+						Ok(ForkResult::Child) => {
+							return Ok(ForkResult::Child);
+						}
+						Ok(ForkResult::Parent(_)) => unsafe { libc::_exit(0) },
+						Err(_) => unsafe { libc::_exit(1) },
 					}
-					Ok(unistd::ForkResult::Parent { .. }) => unsafe { libc::_exit(0) },
-					Err(_) => unsafe { libc::_exit(1) },
-				}
-			};
+				};
 
-			let exit = loop {
-				match nix::sys::wait::waitpid(child, None) {
-					Err(nix::Error::Sys(nix::errno::Errno::EINTR)) => (),
-					exit => break exit,
+				let exit = child.wait().unwrap();
+				if let WaitStatus::Exited(0) = exit {
+					let pid = Pid::from_raw(i32::max_value()); // TODO!
+					Ok(ForkResult::Parent(ChildHandle { pid }))
+				} else {
+					Err(nix::Error::Sys(nix::errno::Errno::UnknownErrno))
 				}
-			}
-			.unwrap();
-			let _ = unsafe { signal::sigaction(signal::SIGCHLD, &old).unwrap() };
-			if let nix::sys::wait::WaitStatus::Exited(_, 0) = exit {
-				let pid = Pid::from_raw(i32::max_value()); // TODO!
-				Ok(ForkResult::Parent(ChildHandle { pid }))
-			} else {
-				Err(nix::Error::Sys(nix::errno::Errno::UnknownErrno))
-			}
+			})();
+			let new2 = unsafe { signal::sigaction(signal::SIGCHLD, &old).unwrap() };
+			assert_eq!(new, new2);
+			ret
 		} else {
 			Ok(match unistd::fork()? {
 				unistd::ForkResult::Child => ForkResult::Child,
