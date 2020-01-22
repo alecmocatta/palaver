@@ -54,6 +54,7 @@ pub struct ChildHandle {
 	#[cfg(target_os = "freebsd")]
 	/// Child Process Descriptor
 	pub pd: Fd,
+	orphan: bool,
 }
 
 /// Possible return values from [`ChildHandle::wait`].
@@ -73,9 +74,10 @@ pub enum WaitStatus {
 #[cfg(unix)]
 impl ChildHandle {
 	/// Signal the child process
-	pub fn wait(&self) -> nix::Result<WaitStatus> {
+	pub fn wait(mut self) -> nix::Result<WaitStatus> {
 		// EVFILT_PROCDESC on freebsd?
 		// linux? https://lwn.net/Articles/773459/
+		self.orphan = true;
 		loop {
 			match wait::waitpid(self.pid, None) {
 				Ok(wait::WaitStatus::Exited(pid, code)) => {
@@ -111,11 +113,17 @@ impl ChildHandle {
 	}
 }
 
-#[cfg(target_os = "freebsd")]
+#[cfg(unix)]
 impl Drop for ChildHandle {
 	fn drop(&mut self) {
-		let err = unsafe { libc::close(self.pd) };
-		assert_eq!(err, 0);
+		if !self.orphan {
+			panic!("must call .wait() before dropping");
+		}
+		#[cfg(target_os = "freebsd")]
+		{
+			let err = unsafe { libc::close(self.pd) };
+			assert_eq!(err, 0);
+		}
 	}
 }
 
@@ -172,6 +180,7 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 			Ok(ForkResult::Parent(ChildHandle {
 				child_pid,
 				child_pd,
+				orphan,
 			}))
 		} else {
 			Ok(ForkResult::Child)
@@ -200,23 +209,22 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 						Err(_) => unsafe { libc::_exit(1) },
 					}
 				};
-
 				let exit = child.wait().unwrap();
 				if let WaitStatus::Exited(0) = exit {
 					let pid = Pid::from_raw(i32::max_value()); // TODO!
-					Ok(ForkResult::Parent(ChildHandle { pid }))
+					Ok(ForkResult::Parent(ChildHandle { pid, orphan }))
 				} else {
 					Err(nix::Error::Sys(nix::errno::Errno::UnknownErrno))
 				}
 			})();
 			let new2 = unsafe { signal::sigaction(signal::SIGCHLD, &old).unwrap() };
-			assert_eq!(new, new2);
+			assert_eq!(new.handler(), new2.handler());
 			ret
 		} else {
 			Ok(match unistd::fork()? {
 				unistd::ForkResult::Child => ForkResult::Child,
 				unistd::ForkResult::Parent { child } => {
-					ForkResult::Parent(ChildHandle { pid: child })
+					ForkResult::Parent(ChildHandle { pid: child, orphan })
 				}
 			})
 		}
