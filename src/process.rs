@@ -5,6 +5,8 @@ use nix::{
 	libc, sys::{signal, wait}, unistd::{self, Pid}
 };
 use std::process::Command;
+#[cfg(unix)]
+use std::sync::atomic::{AtomicU8, Ordering};
 
 #[cfg(target_os = "freebsd")]
 use super::Fd;
@@ -54,7 +56,8 @@ pub struct ChildHandle {
 	#[cfg(target_os = "freebsd")]
 	/// Child Process Descriptor
 	pub pd: Fd,
-	orphan: bool,
+	owns: bool,
+	state: AtomicU8, // 0, 1 = killed, 2 = reaped
 }
 
 /// Possible return values from [`ChildHandle::wait`].
@@ -74,18 +77,26 @@ pub enum WaitStatus {
 #[cfg(unix)]
 impl ChildHandle {
 	/// Signal the child process
-	pub fn wait(mut self) -> nix::Result<WaitStatus> {
+	pub fn wait(&self) -> nix::Result<WaitStatus> {
 		// EVFILT_PROCDESC on freebsd?
 		// linux? https://lwn.net/Articles/773459/
-		self.orphan = true;
+		let ret = Self::wait_(self.pid);
+		if ret.is_ok() {
+			self.state.store(2, Ordering::Relaxed);
+		}
+		ret
+	}
+	fn wait_(pid: Pid) -> nix::Result<WaitStatus> {
+		// EVFILT_PROCDESC on freebsd?
+		// linux? https://lwn.net/Articles/784831/
 		loop {
-			match wait::waitpid(self.pid, None) {
-				Ok(wait::WaitStatus::Exited(pid, code)) => {
-					assert_eq!(pid, self.pid);
+			match wait::waitpid(pid, None) {
+				Ok(wait::WaitStatus::Exited(pid_, code)) => {
+					assert_eq!(pid_, pid);
 					break Ok(WaitStatus::Exited(code));
 				}
-				Ok(wait::WaitStatus::Signaled(pid, signal, dumped)) => {
-					assert_eq!(pid, self.pid);
+				Ok(wait::WaitStatus::Signaled(pid_, signal, dumped)) => {
+					assert_eq!(pid_, pid);
 					break Ok(WaitStatus::Signaled(signal, dumped));
 				}
 				Ok(_) | Err(nix::Error::Sys(nix::errno::Errno::EINTR)) => (),
@@ -94,31 +105,62 @@ impl ChildHandle {
 		}
 	}
 	/// Signal the child process
-	pub fn signal<T: Into<Option<signal::Signal>>>(&self, sig: T) -> nix::Result<()> {
-		#[cfg(target_os = "freebsd")]
-		{
-			let res = unsafe {
-				libc::pdkill(
-					self.pd,
-					match signal.into() {
-						Some(s) => s as libc::c_int,
-						None => 0,
-					},
-				)
-			};
-			Errno::result(res).map(drop)
+	pub fn signal<T: Into<Option<signal::Signal>>>(&self, signal: T) -> nix::Result<()> {
+		assert!(
+			self.owns,
+			".signal() can only be called on non-orphaned children"
+		);
+		let signal = signal.into();
+		if self.state.load(Ordering::Relaxed) != 0 {
+			return Err(nix::Error::Sys(nix::errno::Errno::ESRCH)); //optimisation, not necessary for correctness
 		}
-		#[cfg(not(target_os = "freebsd"))]
-		signal::kill(self.pid, sig)
+		{
+			#[cfg(target_os = "freebsd")]
+			{
+				let res = unsafe {
+					libc::pdkill(
+						self.pd,
+						match signal {
+							Some(s) => s as libc::c_int,
+							None => 0,
+						},
+					)
+				};
+				Errno::result(res).map(drop)
+			}
+			#[cfg(not(target_os = "freebsd"))]
+			signal::kill(self.pid, signal)
+		}?;
+		if signal == Some(signal::SIGKILL) {
+			let _ = self.state.compare_and_swap(0, 1, Ordering::Relaxed);
+		}
+		Ok(())
 	}
 }
 
 #[cfg(unix)]
 impl Drop for ChildHandle {
 	fn drop(&mut self) {
-		if !self.orphan {
-			panic!("must call .wait() before dropping");
+		if self.owns {
+			let state = *self.state.get_mut();
+			if state == 0 {
+				self.signal(signal::SIGKILL).expect("a");
+			}
+			if state != 2 {
+				let _ = self.wait().expect("b");
+			}
+			let group = Pid::from_raw(-self.pid.as_raw());
+			// panic!();
+			// eprintln!("{}", format!("kill2 {}", group));
+			signal::kill(group, signal::SIGKILL).expect("c");
+			// let status = ChildHandle::wait_(Pid::from_raw(-self.pid.as_raw())).expect("d");
+			// assert!(matches!(status, WaitStatus::Signaled(signal::SIGKILL, _)), "{:?}", status);
 		}
+		// {
+		// 	signal::kill(self.pid, signal::SIGKILL).unwrap();
+		// 	let a = a.wait().unwrap();
+		// 	assert!(matches!(a, WaitStatus::Signaled(signal::SIGKILL, _)), "{:?}", a);
+		// }
 		#[cfg(target_os = "freebsd")]
 		{
 			let err = unsafe { libc::close(self.pd) };
@@ -180,7 +222,7 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 			Ok(ForkResult::Parent(ChildHandle {
 				child_pid,
 				child_pd,
-				orphan,
+				owns: true,
 			}))
 		} else {
 			Ok(ForkResult::Child)
@@ -198,10 +240,10 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 			);
 			let old = unsafe { signal::sigaction(signal::SIGCHLD, &new).unwrap() };
 			let ret = (|| {
-				let child = if let ForkResult::Parent(child) = fork(false)? {
+				let child = if let ForkResult::Parent(child) = basic_fork()? {
 					child
 				} else {
-					match fork(false) {
+					match basic_fork() {
 						Ok(ForkResult::Child) => {
 							return Ok(ForkResult::Child);
 						}
@@ -212,7 +254,11 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 				let exit = child.wait().unwrap();
 				if let WaitStatus::Exited(0) = exit {
 					let pid = Pid::from_raw(i32::max_value()); // TODO!
-					Ok(ForkResult::Parent(ChildHandle { pid, orphan }))
+					Ok(ForkResult::Parent(ChildHandle {
+						pid,
+						owns: false,
+						state: AtomicU8::new(0),
+					}))
 				} else {
 					Err(nix::Error::Sys(nix::errno::Errno::UnknownErrno))
 				}
@@ -221,14 +267,65 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 			assert_eq!(new.handler(), new2.handler());
 			ret
 		} else {
-			Ok(match unistd::fork()? {
-				unistd::ForkResult::Child => ForkResult::Child,
-				unistd::ForkResult::Parent { child } => {
-					ForkResult::Parent(ChildHandle { pid: child, orphan })
+			Ok(match basic_fork()? {
+				ForkResult::Child => {
+					let a = if let ForkResult::Parent(child) = basic_fork()? {
+						child
+					} else {
+						loop {
+							unistd::pause();
+						}
+					};
+					let group = unistd::getpgrp();
+					unistd::setpgid(unistd::Pid::from_raw(0), unistd::Pid::from_raw(0)).unwrap();
+					let b = if let ForkResult::Parent(child) = basic_fork()? {
+						child
+					} else {
+						for fd in 0..1024 {
+							let _ = unistd::close(fd);
+						}
+						loop {
+							unistd::pause();
+						}
+					};
+					signal::kill(a.pid, signal::SIGKILL).unwrap();
+					let status = a.wait().unwrap();
+					assert!(
+						matches!(status, WaitStatus::Signaled(signal::SIGKILL, _)),
+						"{:?}",
+						status
+					);
+					unistd::setpgid(unistd::Pid::from_raw(0), group).unwrap();
+					assert_eq!(unistd::getpgid(Some(b.pid)).unwrap(), unistd::getpid());
+					// signal::kill(Pid::from_raw(-unistd::getpid().as_raw()), signal::SIGKILL).unwrap();
+					// let b = b.wait().unwrap();
+					// assert!(matches!(b, WaitStatus::Signaled(signal::SIGKILL, _)), "{:?}", a);
+					ForkResult::Child
+				}
+				ForkResult::Parent(mut child) => {
+					child.owns = true;
+					// std::thread::sleep_ms(500);
+					let group = Pid::from_raw(-child.pid.as_raw());
+					// signal::kill(group, signal::SIGKILL).expect("e");
+					// eprintln!("{}", format!("kill {}", group));
+					// let status = ChildHandle::wait_(group).expect("f");
+					// assert!(matches!(status, WaitStatus::Signaled(signal::SIGKILL, _)), "{:?}", status);
+					ForkResult::Parent(child)
 				}
 			})
 		}
 	}
+}
+
+fn basic_fork() -> nix::Result<ForkResult> {
+	Ok(match unistd::fork()? {
+		unistd::ForkResult::Child => ForkResult::Child,
+		unistd::ForkResult::Parent { child } => ForkResult::Parent(ChildHandle {
+			pid: child,
+			owns: false,
+			state: AtomicU8::new(0),
+		}),
+	})
 }
 
 #[cfg(test)]
