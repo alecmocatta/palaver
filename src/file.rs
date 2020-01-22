@@ -154,20 +154,26 @@ pub fn pipe(flags: fcntl::OFlag) -> nix::Result<(Fd, Fd)> {
 	{
 		unistd::pipe().map(|(read, write)| {
 			fn apply(fd: Fd, new_flags: fcntl::OFlag) {
-				let mut flags = fcntl::OFlag::from_bits_truncate(
+				let fs_flags = fcntl::OFlag::from_bits_truncate(
 					fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFL).unwrap(),
 				);
-				flags |= new_flags & !fcntl::OFlag::O_CLOEXEC;
-				let err = fcntl::fcntl(fd, fcntl::FcntlArg::F_SETFL(flags)).unwrap();
-				assert_eq!(err, 0);
-				let mut flags =
+				let new_fs_flags = fs_flags | (new_flags & !fcntl::OFlag::O_CLOEXEC);
+				if fs_flags != new_fs_flags {
+					let err = fcntl::fcntl(fd, fcntl::FcntlArg::F_SETFL(new_fs_flags)).unwrap();
+					assert_eq!(err, 0);
+				}
+				let fd_flags =
 					fcntl::FdFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap())
 						.unwrap();
-				flags.set(
+				let mut new_fd_flags = fd_flags;
+				new_fd_flags.set(
 					fcntl::FdFlag::FD_CLOEXEC,
 					new_flags.contains(fcntl::OFlag::O_CLOEXEC),
 				);
-				let _ = fcntl::fcntl(fd, fcntl::FcntlArg::F_SETFD(flags)).unwrap();
+				if fd_flags != new_fd_flags {
+					let err = fcntl::fcntl(fd, fcntl::FcntlArg::F_SETFD(new_fd_flags)).unwrap();
+					assert_eq!(err, 0);
+				}
 			}
 			apply(read, flags);
 			apply(write, flags);

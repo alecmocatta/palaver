@@ -1,12 +1,16 @@
 //! Process-related functionality
 
 #[cfg(unix)]
+use crate::{file, Fd};
+#[cfg(unix)]
 use nix::{
-	libc, sys::{signal, wait}, unistd::{self, Pid}
+	fcntl, libc, poll, sys::{signal, wait}, unistd::{self, Pid}
 };
 use std::process::Command;
 #[cfg(unix)]
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::{
+	convert::{TryFrom, TryInto}, ptr, sync::atomic::{AtomicU8, Ordering}
+};
 
 #[cfg(target_os = "freebsd")]
 use super::Fd;
@@ -48,7 +52,7 @@ pub fn count_threads() -> usize {
 
 /// Child process handle
 #[cfg(unix)]
-#[allow(missing_copy_implementations)]
+// #[allow(missing_copy_implementations)]
 #[derive(Debug)]
 pub struct ChildHandle {
 	/// Child Process ID
@@ -56,8 +60,13 @@ pub struct ChildHandle {
 	#[cfg(target_os = "freebsd")]
 	/// Child Process Descriptor
 	pub pd: Fd,
-	owns: bool,
+	owns: Option<Handle>,
+}
+#[cfg(unix)]
+#[derive(Debug)]
+struct Handle {
 	state: AtomicU8, // 0, 1 = killed, 2 = reaped
+	pipe_write: Fd,
 }
 
 /// Possible return values from [`ChildHandle::wait`].
@@ -81,8 +90,8 @@ impl ChildHandle {
 		// EVFILT_PROCDESC on freebsd?
 		// linux? https://lwn.net/Articles/773459/
 		let ret = Self::wait_(self.pid);
-		if ret.is_ok() {
-			self.state.store(2, Ordering::Relaxed);
+		if let (Ok(_), Some(owns)) = (ret, &self.owns) {
+			owns.state.store(2, Ordering::Relaxed);
 		}
 		ret
 	}
@@ -106,12 +115,12 @@ impl ChildHandle {
 	}
 	/// Signal the child process
 	pub fn signal<T: Into<Option<signal::Signal>>>(&self, signal: T) -> nix::Result<()> {
-		assert!(
-			self.owns,
-			".signal() can only be called on non-orphaned children"
-		);
+		let owns = self
+			.owns
+			.as_ref()
+			.expect(".signal() can only be called on non-orphaned children");
 		let signal = signal.into();
-		if self.state.load(Ordering::Relaxed) != 0 {
+		if owns.state.load(Ordering::Relaxed) != 0 {
 			return Err(nix::Error::Sys(nix::errno::Errno::ESRCH)); //optimisation, not necessary for correctness
 		}
 		{
@@ -132,7 +141,7 @@ impl ChildHandle {
 			signal::kill(self.pid, signal)
 		}?;
 		if signal == Some(signal::SIGKILL) {
-			let _ = self.state.compare_and_swap(0, 1, Ordering::Relaxed);
+			let _ = owns.state.compare_and_swap(0, 1, Ordering::Relaxed);
 		}
 		Ok(())
 	}
@@ -141,14 +150,15 @@ impl ChildHandle {
 #[cfg(unix)]
 impl Drop for ChildHandle {
 	fn drop(&mut self) {
-		if self.owns {
-			let state = *self.state.get_mut();
+		if self.owns.is_some() {
+			let state = *self.owns.as_mut().unwrap().state.get_mut();
 			if state == 0 {
 				self.signal(signal::SIGKILL).expect("a");
 			}
 			if state != 2 {
 				let _ = self.wait().expect("b");
 			}
+			unistd::close(self.owns.as_mut().unwrap().pipe_write).unwrap();
 			let group = Pid::from_raw(-self.pid.as_raw());
 			// panic!();
 			// eprintln!("{}", format!("kill2 {}", group));
@@ -206,6 +216,20 @@ pub enum ForkResult {
 /// }
 /// ```
 
+struct StdErr;
+impl std::io::Write for StdErr {
+	fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+		use std::os::unix::io::{FromRawFd, IntoRawFd};
+		let mut file = unsafe { std::fs::File::from_raw_fd(libc::STDERR_FILENO) };
+		let ret = file.write(buf);
+		let _ = file.into_raw_fd();
+		ret
+	}
+	fn flush(&mut self) -> std::io::Result<()> {
+		Ok(())
+	}
+}
+
 // See also https://github.com/qt/qtbase/blob/v5.12.0/src/3rdparty/forkfd/forkfd.c
 #[cfg(unix)]
 pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
@@ -254,11 +278,7 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 				let exit = child.wait().unwrap();
 				if let WaitStatus::Exited(0) = exit {
 					let pid = Pid::from_raw(i32::max_value()); // TODO!
-					Ok(ForkResult::Parent(ChildHandle {
-						pid,
-						owns: false,
-						state: AtomicU8::new(0),
-					}))
+					Ok(ForkResult::Parent(ChildHandle { pid, owns: None }))
 				} else {
 					Err(nix::Error::Sys(nix::errno::Errno::UnknownErrno))
 				}
@@ -267,8 +287,10 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 			assert_eq!(new.handler(), new2.handler());
 			ret
 		} else {
+			let (pipe_read, pipe_write) = file::pipe(fcntl::OFlag::empty())?;
 			Ok(match basic_fork()? {
 				ForkResult::Child => {
+					unistd::close(pipe_write).unwrap();
 					let a = if let ForkResult::Parent(child) = basic_fork()? {
 						child
 					} else {
@@ -300,12 +322,64 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 					// signal::kill(Pid::from_raw(-unistd::getpid().as_raw()), signal::SIGKILL).unwrap();
 					// let b = b.wait().unwrap();
 					// assert!(matches!(b, WaitStatus::Signaled(signal::SIGKILL, _)), "{:?}", a);
+					// die if our owning process dies
+					// PR_SET_PDEATHSIG would kill us if thread exits http://man7.org/linux/man-pages/man2/prctl.2.html
+					extern "C" fn thread(arg: *mut libc::c_void) -> *mut libc::c_void {
+						// TODO: abort on unwind
+						let pipe_read: i32 = (arg as usize).try_into().unwrap();
+						// std::thread::spawn(move||{
+						let mut pollfds = [poll::PollFd::new(pipe_read, poll::PollFlags::POLLHUP)];
+						let n = poll::poll(&mut pollfds, -1).unwrap();
+						// assert_eq!(n, 1);
+						// let err = unistd::read(pipe_read, &mut [0]);
+						// let err2 = unistd::read(pipe_read, &mut [0]);
+						// use std::io::Write;
+						// StdErr.write_all(format!("aaaaaaa: {:?}\n", err).as_bytes());
+						// assert_eq!(err, 0);
+						// StdErr.write_all(b"aaaaa\n");
+						// loop { }
+						if n == 1
+							&& pollfds[0]
+								.revents()
+								.unwrap()
+								.contains(poll::PollFlags::POLLHUP)
+						{
+							// (err,err2) == (Ok(0),Ok(0)) {
+							signal::kill(unistd::getpid(), signal::SIGKILL).unwrap();
+						}
+						// std::process::abort();
+						// loop {}
+						// });
+						ptr::null_mut()
+					}
+					let mut native: libc::pthread_t = 0;
+					let res = unsafe {
+						libc::pthread_create(
+							&mut native,
+							ptr::null(),
+							thread,
+							// ptr::null_mut(),
+							usize::try_from(pipe_read).unwrap() as _,
+						)
+					};
+					assert_eq!(res, 0);
+					// #[cfg(any(target_os = "android", target_os = "linux"))]
+					// {
+					// 	let err = unsafe {
+					// 		nix::libc::prctl(nix::libc::PR_SET_PDEATHSIG, nix::libc::SIGKILL)
+					// 	};
+					// 	assert_eq!(err, 0);
+					// }
 					ForkResult::Child
 				}
 				ForkResult::Parent(mut child) => {
-					child.owns = true;
+					unistd::close(pipe_read).unwrap();
+					child.owns = Some(Handle {
+						state: AtomicU8::new(0),
+						pipe_write,
+					});
 					// std::thread::sleep_ms(500);
-					let group = Pid::from_raw(-child.pid.as_raw());
+					// let group = Pid::from_raw(-child.pid.as_raw());
 					// signal::kill(group, signal::SIGKILL).expect("e");
 					// eprintln!("{}", format!("kill {}", group));
 					// let status = ChildHandle::wait_(group).expect("f");
@@ -322,8 +396,7 @@ fn basic_fork() -> nix::Result<ForkResult> {
 		unistd::ForkResult::Child => ForkResult::Child,
 		unistd::ForkResult::Parent { child } => ForkResult::Parent(ChildHandle {
 			pid: child,
-			owns: false,
-			state: AtomicU8::new(0),
+			owns: None,
 		}),
 	})
 }
