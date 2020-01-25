@@ -320,7 +320,7 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 				drop(ready_write);
 				#[cfg(any(target_os = "macos", target_os = "ios"))]
 				let _ = std::thread::spawn(move || {
-					std::thread::sleep(std::time::Duration::from_millis(1000));
+					std::thread::sleep(std::time::Duration::from_millis(10));
 					unistd::close(eternal_write).unwrap();
 				});
 				#[cfg(not(any(target_os = "macos", target_os = "ios")))]
