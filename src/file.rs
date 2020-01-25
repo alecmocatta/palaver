@@ -660,9 +660,9 @@ pub fn fd_path_heapless(fd: Fd) -> io::Result<heapless::String<heapless::consts:
 /// // Close all file descriptors except std{in,out,err}.
 /// # #[cfg(unix)]
 /// for fd in FdIter::new().unwrap() {
-/// 	if fd > 2 {
-/// 		nix::unistd::close(fd).unwrap();
-/// 	}
+///     if fd > 2 {
+///         nix::unistd::close(fd).unwrap();
+///     }
 /// }
 /// ```
 pub struct FdIter(#[cfg(unix)] *mut libc::DIR);

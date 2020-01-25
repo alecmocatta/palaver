@@ -15,19 +15,17 @@
 //! use std::io::Read;
 //! use palaver::env::exe;
 //!
-//! # fn main() {
 //! let mut current_binary = vec![];
 //! exe().unwrap().read_to_end(&mut current_binary).unwrap();
 //! println!("Current binary is {} bytes long!", current_binary.len());
-//! # }
 //! ```
 //!
 //! ```
 //! use palaver::env;
 //!
 //! pub fn my_library_func() {
-//! 	let args = env::args();
-//! 	let vars = env::vars();
+//!     let args = env::args();
+//!     let vars = env::vars();
 //! }
 //! ```
 
