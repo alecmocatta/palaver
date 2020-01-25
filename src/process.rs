@@ -189,7 +189,7 @@ pub enum ForkResult {
 /// ```no_run
 /// use palaver::process::*;
 ///
-/// match fork(false, true).unwrap() {
+/// match fork(false).unwrap() {
 ///     ForkResult::Parent(child_proc) => {
 ///         // do stuff
 ///         // you can access child_proc.pid on any platform
