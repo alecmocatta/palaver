@@ -1,9 +1,9 @@
 #![cfg(unix)]
 
-use nix::*;
+use nix::{sys::signal, unistd::Pid, *};
 use rand::Rng;
 use std::{
-	process, sync::{
+	mem, process, sync::{
 		atomic::{AtomicBool, Ordering}, Arc
 	}, thread::{self, sleep}, time::Duration
 };
@@ -12,15 +12,8 @@ use palaver::{
 	file::pipe, process::{fork, ForkResult}
 };
 
-#[inline]
-fn abort_on_unwind<F: FnOnce() -> T, T>(f: F) -> T {
-	replace_with::on_unwind(f, || {
-		std::process::abort();
-	})
-}
-
 #[test]
-fn test_kills_grandchild() {
+fn kills_grandchild() {
 	let (read, write) = pipe(fcntl::OFlag::empty()).unwrap();
 	let child = if let ForkResult::Parent(child) = fork(false).unwrap() {
 		child
@@ -79,7 +72,7 @@ fn run(threads: usize, iterations: usize) {
 	});
 	let run = move |thread| {
 		for i in 0..iterations {
-			test_kills_grandchild();
+			kills_grandchild();
 			if i % 100 == 0 {
 				println!("{}\t{}", thread, i);
 			}
@@ -96,22 +89,84 @@ fn run(threads: usize, iterations: usize) {
 }
 
 #[test]
-fn main() {
+fn multithreaded() {
 	abort_on_unwind(|| {
-		let pid = unistd::getpid();
-		let group = unistd::getpgrp();
-		let as_group_leader = pid == group;
-		run(10, 10_000);
-
-		if let ForkResult::Parent(child) = fork(false).unwrap() {
-			child.wait().unwrap();
-		} else {
-			assert_eq!(group, unistd::getpgrp());
-			if !as_group_leader {
-				unistd::setpgid(unistd::Pid::from_raw(0), unistd::Pid::from_raw(0)).unwrap();
-			}
+		assert_dead(|| {
+			let pid = unistd::getpid();
+			let group = unistd::getpgrp();
+			let as_group_leader = pid == group;
 			run(10, 10_000);
-			process::exit(0);
-		}
+
+			if let ForkResult::Parent(child) = fork(false).unwrap() {
+				child.wait().unwrap();
+			} else {
+				assert_eq!(group, unistd::getpgrp());
+				if !as_group_leader {
+					unistd::setpgid(unistd::Pid::from_raw(0), unistd::Pid::from_raw(0)).unwrap();
+				}
+				run(10, 10_000);
+				process::exit(0);
+			}
+		})
+	})
+}
+
+#[test]
+fn group_kill() {
+	abort_on_unwind(|| {
+		assert_dead(|| {
+			for _ in 0..1_000 {
+				let child = if let ForkResult::Parent(child) = fork(false).unwrap() {
+					child
+				} else {
+					unistd::setpgid(unistd::Pid::from_raw(0), unistd::Pid::from_raw(0)).unwrap();
+					if let ForkResult::Parent(child) = fork(false).unwrap() {
+						assert_eq!(unistd::getpid(), unistd::getpgrp());
+						mem::forget(child);
+					} else {
+						assert_ne!(unistd::getpid(), unistd::getpgrp());
+					}
+					run(3, 10_000);
+					process::exit(0);
+				};
+
+				sleep(
+					rand::thread_rng().gen_range(Duration::new(0, 0), Duration::from_millis(500)),
+				);
+				signal::kill(Pid::from_raw(-child.pid.as_raw()), signal::SIGKILL).unwrap();
+				child.wait().unwrap();
+				mem::forget(child);
+			}
+		})
+	})
+}
+
+fn assert_dead<R>(f: impl FnOnce() -> R) -> R {
+	let tmpdir = (0..10)
+		.map(|_| rand::thread_rng().sample(rand::distributions::Alphanumeric))
+		.collect::<String>();
+	std::fs::create_dir(&tmpdir).unwrap();
+	std::env::set_current_dir(&tmpdir).unwrap();
+	let ret = f();
+	std::env::set_current_dir("..").unwrap();
+	let out = std::process::Command::new("lsof")
+		.arg(&tmpdir)
+		.output()
+		.expect("failed to execute process")
+		.stdout;
+	let of = out
+		.split(|&x| x == b'\n')
+		.skip(1)
+		.filter(|x| !x.is_empty())
+		.count();
+	std::fs::remove_dir(&tmpdir).unwrap();
+	assert_eq!(of, 0, "{}", String::from_utf8_lossy(&out));
+	ret
+}
+
+#[inline]
+fn abort_on_unwind<F: FnOnce() -> T, T>(f: F) -> T {
+	replace_with::on_unwind(f, || {
+		std::process::abort();
 	})
 }

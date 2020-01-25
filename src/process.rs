@@ -150,13 +150,13 @@ impl Drop for ChildHandle {
 		if self.owns.is_some() {
 			let state = *self.owns.as_mut().unwrap().state.get_mut();
 			if state == 0 {
-				self.signal(signal::SIGKILL).expect("a");
+				let _ = self.signal(signal::SIGKILL);
 			}
 			if state != 2 {
-				let _ = self.wait().expect("b");
+				let _ = self.wait().unwrap();
 			}
 			let group = Pid::from_raw(-self.pid.as_raw());
-			signal::kill(group, signal::SIGKILL).expect("c");
+			let _ = signal::kill(group, signal::SIGKILL);
 			#[cfg(not(target_os = "freebsd"))]
 			unistd::close(self.owns.as_mut().unwrap().eternal_write).unwrap();
 		}
@@ -209,7 +209,7 @@ pub enum ForkResult {
 pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 	if orphan {
 		// inspired by fork2 http://www.faqs.org/faqs/unix-faq/programmer/faq/
-		// TODO: how to make this not racy?
+		// TODO: make this not racy, could add a third fork?
 		let new = signal::SigAction::new(
 			signal::SigHandler::SigDfl,
 			signal::SaFlags::empty(),
@@ -316,8 +316,13 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 				drop(ready_write);
 				unistd::close(eternal_write).unwrap();
 				if let Some(retainer) = our_group_retainer {
-					let group = unistd::getpgid(Some(retainer.pid)).unwrap_or(group); // slightly more immune to races than getpgrp?
-					unistd::setpgid(unistd::Pid::from_raw(0), group).unwrap();
+					unistd::getpgid(Some(retainer.pid))
+						.and_then(|group| unistd::setpgid(unistd::Pid::from_raw(0), group))
+						.and_then(|_| unistd::getpgid(Some(retainer.pid)).map(drop))
+						.unwrap_or_else(|_| {
+							signal::kill(unistd::getpid(), signal::SIGKILL).unwrap();
+							loop {}
+						});
 					signal::kill(retainer.pid, signal::SIGKILL).unwrap();
 					let _ = retainer.wait().unwrap();
 				}
