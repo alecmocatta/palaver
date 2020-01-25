@@ -69,6 +69,7 @@ struct Handle {
 }
 
 /// Possible return values from [`ChildHandle::wait`].
+#[cfg(unix)]
 #[derive(Clone, Copy, Debug)]
 pub enum WaitStatus {
 	/// The process exited normally (as with `exit()` or returning from
@@ -350,6 +351,7 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 	}
 }
 
+#[cfg(unix)]
 fn basic_fork(may_outlive: bool) -> nix::Result<ForkResult> {
 	#[cfg(target_os = "freebsd")]
 	{
