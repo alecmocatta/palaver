@@ -23,10 +23,14 @@ maintenance = { status = "actively-developed" }
 [features]
 nightly = ["valgrind_request"]
 
+[package.metadata.docs.rs]
+all-features = true
+
 [dependencies]
 bitflags = "1.0"
 heapless = "0.5"
 lazy_static = "1.0"
+replace_with = "0.1"
 typenum = "1.10"
 valgrind_request = { version = "1.1", optional = true }
 
@@ -46,11 +50,8 @@ procinfo = "0.4"
 [dev-dependencies]
 serde_json = "1.0"
 escargot = "0.5"
-
-[package.metadata.docs.rs]
-all-features = true
+rand = "0.7"
 
 [[test]]
 name = "fd_iter"
-path = "tests/fd_iter.rs"
 harness = false

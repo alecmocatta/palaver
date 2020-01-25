@@ -23,7 +23,11 @@
 	clippy::if_not_else,
 	clippy::shadow_unrelated,
 	clippy::similar_names,
-	clippy::module_name_repetitions
+	clippy::module_name_repetitions,
+	clippy::empty_loop,
+	clippy::must_use_candidate,
+	clippy::missing_errors_doc,
+	clippy::same_functions_in_if_condition
 )]
 
 pub mod env;
