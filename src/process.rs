@@ -14,6 +14,7 @@ use std::{
 use crate::{file, Fd};
 
 #[doc(inline)]
+#[cfg(unix)]
 pub use signal::Signal;
 
 /// Count the number of processes visible to this process. Counts the lines of `ps aux` minus one (the header).

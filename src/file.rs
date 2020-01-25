@@ -22,6 +22,7 @@ use std::{
 };
 
 #[doc(inline)]
+#[cfg(unix)]
 pub use fcntl::{FdFlag, OFlag};
 
 /// Maps file descriptors [(from,to)]
@@ -292,7 +293,7 @@ fn tmpfile(
 	// let rand = fs::File::open("/dev/urandom").expect("Couldn't open /dev/urandom");
 	let rand = nix::fcntl::open(
 		"/dev/urandom",
-		nix::OFlag::O_RDONLY,
+		OFlag::O_RDONLY,
 		nix::sys::stat::Mode::empty(),
 	)
 	.expect("Couldn't open /dev/urandom");
