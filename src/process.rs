@@ -205,6 +205,7 @@ pub enum ForkResult {
 /// ```
 // See also https://github.com/qt/qtbase/blob/v5.12.0/src/3rdparty/forkfd/forkfd.c
 #[cfg(unix)]
+#[allow(clippy::too_many_lines)]
 pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 	if orphan {
 		// inspired by fork2 http://www.faqs.org/faqs/unix-faq/programmer/faq/
@@ -255,14 +256,21 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 		Ok(match basic_fork(false)? {
 			ForkResult::Child => {
 				drop(ready_read);
-				let (eternal_read, eternal_write) = file::pipe(fcntl::OFlag::empty()).unwrap();
+				let new = signal::SigAction::new(
+					signal::SigHandler::SigDfl,
+					signal::SaFlags::empty(),
+					signal::SigSet::empty(),
+				);
+				let _ = unsafe { signal::sigaction(signal::SIGCHLD, &new).unwrap() };
 				let pid = unistd::getpid();
 				let group = unistd::getpgrp();
+				let (eternal_read, eternal_write) = file::pipe(fcntl::OFlag::empty()).unwrap();
 				let our_group_retainer = if group != pid {
 					let child = if let ForkResult::Parent(child) = basic_fork(false)? {
 						child
 					} else {
 						drop(ready_write);
+						unistd::close(eternal_write).unwrap();
 						let err = unistd::read(eternal_read, &mut [0]).unwrap();
 						assert_eq!(err, 0);
 						signal::kill(unistd::getpid(), signal::SIGKILL).unwrap();
@@ -277,6 +285,7 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 					child
 				} else {
 					drop(ready_write);
+					unistd::close(eternal_write).unwrap();
 					for fd in 0..1024 {
 						// TODO // && fd > 2 {
 						if fd != eternal_read {
