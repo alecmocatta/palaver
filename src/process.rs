@@ -13,6 +13,9 @@ use std::{
 #[cfg(unix)]
 use crate::{file, Fd};
 
+#[doc(inline)]
+pub use signal::Signal;
+
 /// Count the number of processes visible to this process. Counts the lines of `ps aux` minus one (the header).
 pub fn count() -> usize {
 	let out = Command::new("ps")
@@ -80,7 +83,7 @@ pub enum WaitStatus {
 	/// indicates whether the signal generated a core dump. This case
 	/// matches the C macro `WIFSIGNALED(status)`; the last two fields
 	/// correspond to `WTERMSIG(status)` and `WCOREDUMP(status)`.
-	Signaled(signal::Signal, bool),
+	Signaled(Signal, bool),
 }
 
 #[cfg(unix)]
@@ -114,7 +117,7 @@ impl ChildHandle {
 	}
 	/// Signal the child process
 	#[allow(unreachable_code)]
-	pub fn signal<T: Into<Option<signal::Signal>>>(&self, signal: T) -> nix::Result<()> {
+	pub fn signal<T: Into<Option<Signal>>>(&self, signal: T) -> nix::Result<()> {
 		let signal = signal.into();
 		#[cfg(target_os = "freebsd")]
 		{
@@ -175,7 +178,7 @@ pub enum ForkResult {
 	Child,
 }
 
-/// A Rust fork wrapper that provides more coherent, FreeBSD-inspired semantics:
+/// A Rust fork wrapper that provides more coherent, FreeBSD-inspired semantics.
 ///
 /// - immune to PID race conditions (see [here](https://lwn.net/Articles/773459/) for a description of the race);
 /// - thus it's possible to `waitpid()` on one thread and `kill()` on another without a race;

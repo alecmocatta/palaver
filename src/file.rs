@@ -21,9 +21,12 @@ use std::{
 	fmt, io::{self, Read, Write}, path
 };
 
+#[doc(inline)]
+pub use fcntl::{FdFlag, OFlag};
+
 /// Maps file descriptors [(from,to)]
 #[cfg(unix)]
-pub fn move_fds(fds: &mut [(Fd, Fd)], flags: Option<fcntl::FdFlag>, allow_nonexistent: bool) {
+pub fn move_fds(fds: &mut [(Fd, Fd)], flags: Option<FdFlag>, allow_nonexistent: bool) {
 	loop {
 		#[allow(clippy::never_loop)]
 		let i = 'a: loop {
@@ -49,18 +52,11 @@ pub fn move_fds(fds: &mut [(Fd, Fd)], flags: Option<fcntl::FdFlag>, allow_nonexi
 /// Makes a file descriptor read-only, which seems neccessary on some platforms to pass to fexecve and is good practise anyway.
 #[cfg(unix)]
 pub fn seal_fd(fd: Fd) {
-	let fd2 = fcntl::open(
-		&fd_path(fd).unwrap(),
-		fcntl::OFlag::O_RDONLY,
-		stat::Mode::empty(),
-	)
-	.unwrap();
-	let fd_flags =
-		fcntl::FdFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap()).unwrap();
-	let fl_flags =
-		fcntl::OFlag::from_bits_truncate(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFL).unwrap())
-			& !(fcntl::OFlag::O_WRONLY | fcntl::OFlag::O_RDWR)
-			| fcntl::OFlag::O_RDONLY;
+	let fd2 = fcntl::open(&fd_path(fd).unwrap(), OFlag::O_RDONLY, stat::Mode::empty()).unwrap();
+	let fd_flags = FdFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap()).unwrap();
+	let fl_flags = OFlag::from_bits_truncate(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFL).unwrap())
+		& !(OFlag::O_WRONLY | OFlag::O_RDWR)
+		| OFlag::O_RDONLY;
 	let err = fcntl::fcntl(fd2, fcntl::FcntlArg::F_SETFL(fl_flags)).unwrap();
 	assert_eq!(err, 0);
 	move_fd(fd2, fd, Some(fd_flags), false).unwrap();
@@ -68,13 +64,13 @@ pub fn seal_fd(fd: Fd) {
 
 /// Duplicate a file descriptor. Flags are passed atomically. `flags` being `None` copies the flags from `oldfd`.
 #[cfg(unix)]
-pub fn dup_fd(oldfd: Fd, flags: Option<fcntl::FdFlag>) -> nix::Result<Fd> {
+pub fn dup_fd(oldfd: Fd, flags: Option<FdFlag>) -> nix::Result<Fd> {
 	let flags = flags.unwrap_or_else(|| {
-		fcntl::FdFlag::from_bits(fcntl::fcntl(oldfd, fcntl::FcntlArg::F_GETFD).unwrap()).unwrap()
+		FdFlag::from_bits(fcntl::fcntl(oldfd, fcntl::FcntlArg::F_GETFD).unwrap()).unwrap()
 	});
 	fcntl::fcntl(
 		oldfd,
-		if flags.contains(fcntl::FdFlag::FD_CLOEXEC) {
+		if flags.contains(FdFlag::FD_CLOEXEC) {
 			fcntl::FcntlArg::F_DUPFD_CLOEXEC(oldfd)
 		} else {
 			fcntl::FcntlArg::F_DUPFD(oldfd)
@@ -89,7 +85,7 @@ pub fn dup_fd(oldfd: Fd, flags: Option<fcntl::FdFlag>) -> nix::Result<Fd> {
 /// Move a file descriptor. Flags are passed atomically. `flags` being `None` copies the flags from `oldfd`. Panics if `newfd` doesn't exist and `allow_nonexistent` isn't set; this can help debug the race of another thread creating `newfd` and having it deleted from under it by us.
 #[cfg(unix)]
 pub fn move_fd(
-	oldfd: Fd, newfd: Fd, flags: Option<fcntl::FdFlag>, allow_nonexistent: bool,
+	oldfd: Fd, newfd: Fd, flags: Option<FdFlag>, allow_nonexistent: bool,
 ) -> nix::Result<()> {
 	copy_fd(oldfd, newfd, flags, allow_nonexistent).and_then(|()| unistd::close(oldfd))
 }
@@ -97,7 +93,7 @@ pub fn move_fd(
 /// Copy a file descriptor. Flags are passed atomically. `flags` being `None` copies the flags from `oldfd`. Panics if `newfd` doesn't exist and `allow_nonexistent` isn't set; this can help debug the race of another thread creating `newfd` and having it deleted from under it by us.
 #[cfg(unix)]
 pub fn copy_fd(
-	oldfd: Fd, newfd: Fd, flags: Option<fcntl::FdFlag>, allow_nonexistent: bool,
+	oldfd: Fd, newfd: Fd, flags: Option<FdFlag>, allow_nonexistent: bool,
 ) -> nix::Result<()> {
 	if !allow_nonexistent {
 		let _ = fcntl::fcntl(newfd, fcntl::FcntlArg::F_GETFD).unwrap();
@@ -106,12 +102,12 @@ pub fn copy_fd(
 		return Err(nix::Error::Sys(errno::Errno::EINVAL));
 	}
 	let flags = flags.unwrap_or_else(|| {
-		fcntl::FdFlag::from_bits(fcntl::fcntl(oldfd, fcntl::FcntlArg::F_GETFD).unwrap()).unwrap()
+		FdFlag::from_bits(fcntl::fcntl(oldfd, fcntl::FcntlArg::F_GETFD).unwrap()).unwrap()
 	});
-	let flags = if flags.contains(fcntl::FdFlag::FD_CLOEXEC) {
-		fcntl::OFlag::O_CLOEXEC
+	let flags = if flags.contains(FdFlag::FD_CLOEXEC) {
+		OFlag::O_CLOEXEC
 	} else {
-		fcntl::OFlag::empty()
+		OFlag::empty()
 	};
 	#[cfg_attr(
 		not(any(target_os = "android", target_os = "linux")),
@@ -129,7 +125,7 @@ pub fn copy_fd(
 
 /// Like pipe2; not atomic on platforms that lack it
 #[cfg(unix)]
-pub fn pipe(flags: fcntl::OFlag) -> nix::Result<(Fd, Fd)> {
+pub fn pipe(flags: OFlag) -> nix::Result<(Fd, Fd)> {
 	#[cfg(any(
 		target_os = "android",
 		target_os = "dragonfly",
@@ -153,23 +149,18 @@ pub fn pipe(flags: fcntl::OFlag) -> nix::Result<(Fd, Fd)> {
 	)))]
 	{
 		unistd::pipe().map(|(read, write)| {
-			fn apply(fd: Fd, new_flags: fcntl::OFlag) {
-				let fs_flags = fcntl::OFlag::from_bits_truncate(
-					fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFL).unwrap(),
-				);
-				let new_fs_flags = fs_flags | (new_flags & !fcntl::OFlag::O_CLOEXEC);
+			fn apply(fd: Fd, new_flags: OFlag) {
+				let fs_flags =
+					OFlag::from_bits_truncate(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFL).unwrap());
+				let new_fs_flags = fs_flags | (new_flags & !OFlag::O_CLOEXEC);
 				if fs_flags != new_fs_flags {
 					let err = fcntl::fcntl(fd, fcntl::FcntlArg::F_SETFL(new_fs_flags)).unwrap();
 					assert_eq!(err, 0);
 				}
 				let fd_flags =
-					fcntl::FdFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap())
-						.unwrap();
+					FdFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap()).unwrap();
 				let mut new_fd_flags = fd_flags;
-				new_fd_flags.set(
-					fcntl::FdFlag::FD_CLOEXEC,
-					new_flags.contains(fcntl::OFlag::O_CLOEXEC),
-				);
+				new_fd_flags.set(FdFlag::FD_CLOEXEC, new_flags.contains(OFlag::O_CLOEXEC));
 				if fd_flags != new_fd_flags {
 					let err = fcntl::fcntl(fd, fcntl::FcntlArg::F_SETFD(new_fd_flags)).unwrap();
 					assert_eq!(err, 0);
@@ -197,9 +188,9 @@ pub fn memfd_create(name: &CStr, cloexec: bool) -> nix::Result<Fd> {
 		{
 			let _ = name;
 			let flags = if cloexec {
-				fcntl::OFlag::O_RDWR | fcntl::OFlag::O_CLOEXEC
+				OFlag::O_RDWR | OFlag::O_CLOEXEC
 			} else {
-				fcntl::OFlag::O_RDWR
+				OFlag::O_RDWR
 			};
 			errno::Errno::result(unsafe {
 				libc::shm_open(libc::SHM_ANON, flags.bits(), stat::Mode::S_IRWXU.bits())
@@ -218,15 +209,14 @@ pub fn memfd_create(name: &CStr, cloexec: bool) -> nix::Result<Fd> {
 		let name = heapless_string_to_cstr(&mut name);
 		mman::shm_open(
 			name,
-			fcntl::OFlag::O_RDWR | fcntl::OFlag::O_CREAT | fcntl::OFlag::O_EXCL,
+			OFlag::O_RDWR | OFlag::O_CREAT | OFlag::O_EXCL,
 			stat::Mode::S_IRWXU,
 		)
 		.map(|fd| {
 			if !cloexec {
 				let mut flags_ =
-					fcntl::FdFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap())
-						.unwrap();
-				flags_.remove(fcntl::FdFlag::FD_CLOEXEC);
+					FdFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap()).unwrap();
+				flags_.remove(FdFlag::FD_CLOEXEC);
 				let _ = fcntl::fcntl(fd, fcntl::FcntlArg::F_SETFD(flags_)).unwrap();
 			}
 			mman::shm_unlink(name).unwrap();
@@ -240,17 +230,16 @@ pub fn memfd_create(name: &CStr, cloexec: bool) -> nix::Result<Fd> {
 			let name = heapless_string_to_cstr(&mut name);
 			fcntl::open(
 				name,
-				fcntl::OFlag::O_RDWR | fcntl::OFlag::O_CREAT | fcntl::OFlag::O_EXCL,
+				OFlag::O_RDWR | OFlag::O_CREAT | OFlag::O_EXCL,
 				stat::Mode::S_IRWXU,
 			)
 			.map(|fd| {
 				unistd::unlink(name).unwrap();
 				if cloexec {
-					let mut flags_ = fcntl::FdFlag::from_bits(
-						fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap(),
-					)
-					.unwrap();
-					flags_.insert(fcntl::FdFlag::FD_CLOEXEC);
+					let mut flags_ =
+						FdFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap())
+							.unwrap();
+					flags_.insert(FdFlag::FD_CLOEXEC);
 					let _ = fcntl::fcntl(fd, fcntl::FcntlArg::F_SETFD(flags_)).unwrap();
 				}
 				fd
@@ -303,7 +292,7 @@ fn tmpfile(
 	// let rand = fs::File::open("/dev/urandom").expect("Couldn't open /dev/urandom");
 	let rand = nix::fcntl::open(
 		"/dev/urandom",
-		nix::fcntl::OFlag::O_RDONLY,
+		nix::OFlag::O_RDONLY,
 		nix::sys::stat::Mode::empty(),
 	)
 	.expect("Couldn't open /dev/urandom");
@@ -373,17 +362,16 @@ pub fn fexecve(fd: Fd, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infallible
 			let to_path = heapless_string_to_cstr(&mut to_path);
 			let to = fcntl::open(
 				to_path,
-				fcntl::OFlag::O_RDWR | fcntl::OFlag::O_CREAT | fcntl::OFlag::O_EXCL,
+				OFlag::O_RDWR | OFlag::O_CREAT | OFlag::O_EXCL,
 				stat::Mode::S_IRWXU,
 			)
 			.map(|fd| {
 				let cloexec = true;
 				if cloexec {
-					let mut flags_ = fcntl::FdFlag::from_bits(
-						fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap(),
-					)
-					.unwrap();
-					flags_.insert(fcntl::FdFlag::FD_CLOEXEC);
+					let mut flags_ =
+						FdFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap())
+							.unwrap();
+					flags_.insert(FdFlag::FD_CLOEXEC);
 					let _ = fcntl::fcntl(fd, fcntl::FcntlArg::F_SETFD(flags_)).unwrap();
 				}
 				fd
@@ -398,7 +386,7 @@ pub fn fexecve(fd: Fd, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infallible
 			let x = io::Seek::seek(&mut from, io::SeekFrom::Start(pos)).unwrap();
 			assert_eq!(x, pos);
 			assert_eq!(from.metadata().unwrap().len(), to.metadata().unwrap().len());
-			let (read, write) = pipe(fcntl::OFlag::O_CLOEXEC).unwrap();
+			let (read, write) = pipe(OFlag::O_CLOEXEC).unwrap();
 			if let unistd::ForkResult::Parent { .. } = unistd::fork().expect("Fork failed") {
 				unistd::close(read).unwrap();
 				execve(to_path, args, vars).map_err(|e| {

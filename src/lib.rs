@@ -6,7 +6,7 @@
 //!
 //! `palaver` = "Platform Abstraction Layer" + pa·lav·er *n.* prolonged and tedious fuss.
 
-#![doc(html_root_url = "https://docs.rs/palaver/0.2.8")]
+#![doc(html_root_url = "https://docs.rs/palaver/0.3.0-alpha.1")]
 #![warn(
 	missing_copy_implementations,
 	missing_debug_implementations,
@@ -25,9 +25,9 @@
 	clippy::missing_errors_doc,
 	clippy::module_name_repetitions,
 	clippy::must_use_candidate,
-	clippy::same_functions_in_if_condition
+	clippy::same_functions_in_if_condition,
 	clippy::shadow_unrelated,
-	clippy::similar_names,
+	clippy::similar_names
 )]
 
 pub mod env;
@@ -39,6 +39,8 @@ pub mod thread;
 #[cfg(unix)]
 pub mod valgrind;
 
+#[doc(hidden)]
+#[deprecated]
 pub use process as fork;
 
 #[cfg(unix)]
