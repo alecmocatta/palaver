@@ -7,6 +7,10 @@ use nix::{libc, poll, sys::socket};
 #[cfg(unix)]
 use std::convert::TryInto;
 
+#[doc(inline)]
+#[cfg(unix)]
+pub use socket::{AddressFamily, SockProtocol, SockType};
+
 #[cfg(unix)]
 bitflags::bitflags! {
 	/// Akin to nix::sys::socket::SockFlag but avail cross-platform
@@ -17,10 +21,11 @@ bitflags::bitflags! {
 		const SOCK_CLOEXEC  = 0b0000_0010;
 	}
 }
+
 /// Falls back to non-atomic if SOCK_NONBLOCK/SOCK_CLOEXEC unavailable
 #[cfg(unix)]
-pub fn socket<T: Into<Option<socket::SockProtocol>>>(
-	domain: socket::AddressFamily, ty: socket::SockType, flags: SockFlag, protocol: T,
+pub fn socket<T: Into<Option<SockProtocol>>>(
+	domain: AddressFamily, ty: SockType, flags: SockFlag, protocol: T,
 ) -> nix::Result<Fd> {
 	let mut flags_ = socket::SockFlag::empty();
 	flags_ = flags_;
@@ -73,6 +78,7 @@ pub fn socket<T: Into<Option<socket::SockProtocol>>>(
 		fd
 	})
 }
+
 /// Like accept4, falls back to non-atomic accept
 #[cfg(unix)]
 pub fn accept(sockfd: Fd, flags: SockFlag) -> nix::Result<Fd> {
