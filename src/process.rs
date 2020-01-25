@@ -1,9 +1,7 @@
 //! Process-related functionality
 
 #[cfg(unix)]
-use crate::{
-	file::{self, fd_path}, Fd
-};
+use crate::{file, Fd};
 #[cfg(unix)]
 use nix::{
 	cmsg_space, errno::Errno, fcntl, libc, sys::socket, sys::uio, sys::{signal, wait}, unistd::{self, Pid}, Error
@@ -11,7 +9,7 @@ use nix::{
 use std::process::Command;
 #[cfg(unix)]
 use std::{
-	convert::{TryFrom, TryInto}, os::unix::io::AsRawFd, os::unix::net::UnixDatagram, ptr, sync::atomic::{AtomicU8, Ordering}
+	os::unix::io::AsRawFd, os::unix::net::UnixDatagram, sync::atomic::{AtomicU8, Ordering}
 };
 
 /// Count the number of processes visible to this process. Counts the lines of `ps aux` minus one (the header).
@@ -183,10 +181,7 @@ pub enum ForkResult {
 /// - child processes are killed on parent termination;
 /// - and it works in the [Capsicum](https://wiki.freebsd.org/Capsicum) capability mode sandbox.
 ///
-/// It's implemented using process descriptors (pdfork) on FreeBSD and normal fork elsewhere.
-///
-/// ## Caveats
-/// - Child process killing on parent termination relies on maintaining an fd (except freebsd) and a thread (except freebsd and linux) in the child; if this isn't possible then pass false for `can_use_fd`.
+/// It's implemented using process descriptors (pdfork) on FreeBSD and normal fork + an extra process elsewhere.
 ///
 /// # Example
 /// ```no_run
@@ -209,7 +204,7 @@ pub enum ForkResult {
 // See also https://github.com/qt/qtbase/blob/v5.12.0/src/3rdparty/forkfd/forkfd.c
 #[cfg(unix)]
 #[allow(clippy::too_many_lines)]
-pub fn fork(orphan: bool, can_use_fd: bool) -> nix::Result<ForkResult> {
+pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 	if orphan {
 		// inspired by fork2 http://www.faqs.org/faqs/unix-faq/programmer/faq/
 		// TODO: how to make this not racy?
@@ -289,12 +284,12 @@ pub fn fork(orphan: bool, can_use_fd: bool) -> nix::Result<ForkResult> {
 					}
 					let err = unistd::read(eternal_read, &mut [0]).unwrap();
 					assert_eq!(err, 0);
+					assert_eq!(unistd::getpgrp(), pid);
+					let _ = signal::kill(pid, signal::SIGKILL);
 					signal::kill(unistd::getpid(), signal::SIGKILL).unwrap();
 					loop {}
 				};
-				if !can_use_fd {
-					unistd::close(eternal_read).unwrap();
-				}
+				unistd::close(eternal_read).unwrap();
 				let iov = [uio::IoVec::from_slice(&[])];
 				let fds = [eternal_write];
 				let cmsg = [socket::ControlMessage::ScmRights(&fds)];
@@ -315,91 +310,6 @@ pub fn fork(orphan: bool, can_use_fd: bool) -> nix::Result<ForkResult> {
 					unistd::setpgid(unistd::Pid::from_raw(0), group).unwrap();
 					signal::kill(retainer.pid, signal::SIGKILL).unwrap();
 					let _ = retainer.wait().unwrap();
-				}
-				// assert_eq!(unistd::getpgid(Some(our_pid_retainer.pid)).unwrap(), pid);
-
-				// die if our owning process dies
-				// PR_SET_PDEATHSIG kills if the parent *thread* (not process) exits http://man7.org/linux/man-pages/man2/prctl.2.html
-				// this can be resolved by calling clone twice (first with CLONE_THREAD then without), but it's tricky to ensure grandchild gets the initial stack
-				// probably requires assembly?
-				// PR_SET_KILL_DESCENDANTS_ON_EXIT potential
-				if can_use_fd {
-					if cfg!(any(target_os = "android", target_os = "linux")) {
-						const F_SETSIG: libc::c_int = 10;
-						let eternal_read = fcntl::open(
-							&fd_path(eternal_read).unwrap(),
-							fcntl::OFlag::O_RDONLY,
-							nix::sys::stat::Mode::empty(),
-						)
-						.unwrap();
-						unsafe {
-							let err = libc::fcntl(eternal_read, F_SETSIG, libc::SIGKILL);
-							assert_eq!(err, 0);
-							let err = libc::fcntl(eternal_read, libc::F_SETOWN, unistd::getpid());
-							assert_eq!(err, 0);
-						}
-						let err = fcntl::fcntl(
-							eternal_read,
-							fcntl::FcntlArg::F_SETFL(
-								fcntl::OFlag::O_NONBLOCK | fcntl::OFlag::O_ASYNC,
-							),
-						)
-						.unwrap();
-						assert_eq!(err, 0);
-						if let Ok(0) = unistd::read(eternal_read, &mut [0]) {
-							signal::kill(unistd::getpid(), signal::SIGKILL).unwrap();
-							loop {}
-						}
-					} else {
-						// mac: https://stackoverflow.com/questions/2211951/aio-on-os-x-vs-linux-why-it-doesnt-work-on-mac-os-x-10-6
-						// is pthread_create an issue if fork called in multithreaded context? if so, here's rolling our own:
-						// const STACK_SIZE: usize = 4096; // enough for anybody
-						// let stack: *mut u8 = nix::sys::mman::mmap(
-						// 	ptr::null_mut(),
-						// 	STACK_SIZE,
-						// 	nix::sys::mman::ProtFlags::PROT_READ
-						// 		| nix::sys::mman::ProtFlags::PROT_WRITE,
-						// 	nix::sys::mman::MapFlags::MAP_PRIVATE
-						// 		| nix::sys::mman::MapFlags::MAP_ANON,
-						// 	-1,
-						// 	0,
-						// )
-						// .unwrap() as _;
-						// let child = unsafe {
-						// 	libc::clone(
-						// 		thread,
-						// 		stack.add(STACK_SIZE) as _,
-						// 		libc::CLONE_VM,
-						// 		usize::try_from(eternal_read).unwrap() as _,
-						// 	)
-						// };
-						// assert_ne!(child, -1);
-						#[inline]
-						fn abort_on_unwind<F: FnOnce() -> T, T>(f: F) -> T {
-							replace_with::on_unwind(f, || {
-								std::process::abort();
-							})
-						}
-						extern "C" fn thread(arg: *mut libc::c_void) -> *mut libc::c_void {
-							abort_on_unwind(|| {
-								let eternal_read: i32 = (arg as usize).try_into().unwrap();
-								let err = unistd::read(eternal_read, &mut [0]).unwrap();
-								assert_eq!(err, 0);
-								signal::kill(unistd::getpid(), signal::SIGKILL).unwrap();
-								loop {}
-							})
-						}
-						let mut native: libc::pthread_t = 0;
-						let res = unsafe {
-							libc::pthread_create(
-								&mut native,
-								ptr::null(),
-								thread,
-								usize::try_from(eternal_read).unwrap() as _,
-							)
-						};
-						assert_eq!(res, 0);
-					}
 				}
 				ForkResult::Child
 			}

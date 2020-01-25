@@ -22,13 +22,13 @@ fn abort_on_unwind<F: FnOnce() -> T, T>(f: F) -> T {
 #[test]
 fn test_kills_grandchild() {
 	let (read, write) = pipe(fcntl::OFlag::empty()).unwrap();
-	let child = if let ForkResult::Parent(child) = fork(false, true).unwrap() {
+	let child = if let ForkResult::Parent(child) = fork(false).unwrap() {
 		child
 	} else {
-		let _child = if let ForkResult::Parent(child) = fork(false, true).unwrap() {
+		let _child = if let ForkResult::Parent(child) = fork(false).unwrap() {
 			child
 		} else {
-			let err = unistd::write(write, &mut [0]).unwrap();
+			let err = unistd::write(write, &[0]).unwrap();
 			assert_eq!(err, 1);
 			loop {
 				unistd::pause()
@@ -103,7 +103,7 @@ fn main() {
 		let as_group_leader = pid == group;
 		run(10, 10_000);
 
-		if let ForkResult::Parent(child) = fork(false, true).unwrap() {
+		if let ForkResult::Parent(child) = fork(false).unwrap() {
 			child.wait().unwrap();
 		} else {
 			assert_eq!(group, unistd::getpgrp());
