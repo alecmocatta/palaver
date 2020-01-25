@@ -20,14 +20,14 @@
 )] // from https://github.com/rust-unofficial/patterns/blob/master/anti_patterns/deny-warnings.md
 #![allow(
 	clippy::doc_markdown,
+	clippy::empty_loop,
 	clippy::if_not_else,
+	clippy::missing_errors_doc,
+	clippy::module_name_repetitions,
+	clippy::must_use_candidate,
+	clippy::same_functions_in_if_condition
 	clippy::shadow_unrelated,
 	clippy::similar_names,
-	clippy::module_name_repetitions,
-	clippy::empty_loop,
-	clippy::must_use_candidate,
-	clippy::missing_errors_doc,
-	clippy::same_functions_in_if_condition
 )]
 
 pub mod env;

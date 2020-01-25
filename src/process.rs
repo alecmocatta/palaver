@@ -252,7 +252,7 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 		if cfg!(target_os = "freebsd") {
 			return basic_fork(false);
 		}
-		let (ready_write, ready_read) = UnixDatagram::pair().unwrap();
+		let (ready_read, ready_write) = UnixDatagram::pair().unwrap();
 		Ok(match basic_fork(false)? {
 			ForkResult::Child => {
 				drop(ready_read);
@@ -261,7 +261,7 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 					signal::SaFlags::empty(),
 					signal::SigSet::empty(),
 				);
-				let _ = unsafe { signal::sigaction(signal::SIGCHLD, &new).unwrap() };
+				let old = unsafe { signal::sigaction(signal::SIGCHLD, &new).unwrap() };
 				let pid = unistd::getpid();
 				let group = unistd::getpgrp();
 				let (eternal_read, eternal_write) = file::pipe(fcntl::OFlag::empty()).unwrap();
@@ -314,6 +314,12 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 					assert_eq!(x, 0);
 				});
 				drop(ready_write);
+				#[cfg(any(target_os = "macos", target_os = "ios"))]
+				let _ = std::thread::spawn(move || {
+					std::thread::sleep(std::time::Duration::from_millis(1000));
+					unistd::close(eternal_write).unwrap();
+				});
+				#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 				unistd::close(eternal_write).unwrap();
 				if let Some(retainer) = our_group_retainer {
 					unistd::getpgid(Some(retainer.pid))
@@ -325,6 +331,10 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 						});
 					signal::kill(retainer.pid, signal::SIGKILL).unwrap();
 					let _ = retainer.wait().unwrap();
+				}
+				if new.handler() != old.handler() {
+					let new2 = unsafe { signal::sigaction(signal::SIGCHLD, &old).unwrap() };
+					assert_eq!(new.handler(), new2.handler());
 				}
 				ForkResult::Child
 			}

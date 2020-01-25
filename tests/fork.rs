@@ -131,7 +131,7 @@ fn group_kill() {
 	})
 }
 
-// Run sequentially
+// Run sequentially to avoid overloading / messing up assert_dead
 #[test]
 fn tests() {
 	println!("kills_grandchild");
