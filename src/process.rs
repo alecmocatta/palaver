@@ -205,7 +205,6 @@ pub enum ForkResult {
 /// ```
 // See also https://github.com/qt/qtbase/blob/v5.12.0/src/3rdparty/forkfd/forkfd.c
 #[cfg(unix)]
-#[allow(clippy::too_many_lines)]
 pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 	if orphan {
 		// inspired by fork2 http://www.faqs.org/faqs/unix-faq/programmer/faq/
