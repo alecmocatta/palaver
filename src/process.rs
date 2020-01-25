@@ -1,8 +1,6 @@
 //! Process-related functionality
 
 #[cfg(unix)]
-use crate::{file, Fd};
-#[cfg(unix)]
 use nix::{
 	cmsg_space, errno::Errno, fcntl, libc, sys::socket, sys::uio, sys::{signal, wait}, unistd::{self, Pid}, Error
 };
@@ -11,6 +9,9 @@ use std::process::Command;
 use std::{
 	os::unix::io::AsRawFd, os::unix::net::UnixDatagram, sync::atomic::{AtomicU8, Ordering}
 };
+
+#[cfg(unix)]
+use crate::{file, Fd};
 
 /// Count the number of processes visible to this process. Counts the lines of `ps aux` minus one (the header).
 pub fn count() -> usize {
