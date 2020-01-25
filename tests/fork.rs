@@ -12,49 +12,50 @@ use palaver::{
 	file::pipe, process::{fork, ForkResult}
 };
 
-#[test]
 fn kills_grandchild() {
-	let (read, write) = pipe(fcntl::OFlag::empty()).unwrap();
-	let child = if let ForkResult::Parent(child) = fork(false).unwrap() {
-		child
-	} else {
-		let _child = if let ForkResult::Parent(child) = fork(false).unwrap() {
+	assert_dead(|| {
+		let (read, write) = pipe(fcntl::OFlag::empty()).unwrap();
+		let child = if let ForkResult::Parent(child) = fork(false).unwrap() {
 			child
 		} else {
-			let err = unistd::write(write, &[0]).unwrap();
-			assert_eq!(err, 1);
+			let _child = if let ForkResult::Parent(child) = fork(false).unwrap() {
+				child
+			} else {
+				let err = unistd::write(write, &[0]).unwrap();
+				assert_eq!(err, 1);
+				loop {
+					unistd::pause()
+				}
+			};
+			unistd::close(write).unwrap();
 			loop {
 				unistd::pause()
 			}
 		};
 		unistd::close(write).unwrap();
-		loop {
-			unistd::pause()
+		let err = unistd::read(read, &mut [0]).unwrap();
+		assert_eq!(err, 1);
+
+		let mut flags =
+			fcntl::OFlag::from_bits_truncate(fcntl::fcntl(read, fcntl::FcntlArg::F_GETFL).unwrap());
+		flags |= fcntl::OFlag::O_NONBLOCK;
+		let err = fcntl::fcntl(read, fcntl::FcntlArg::F_SETFL(flags)).unwrap();
+		assert_eq!(err, 0);
+		let err = unistd::read(read, &mut [0]);
+		assert_eq!(err, Err(nix::Error::Sys(nix::errno::Errno::EAGAIN)));
+		flags &= !fcntl::OFlag::O_NONBLOCK;
+		let err = fcntl::fcntl(read, fcntl::FcntlArg::F_SETFL(flags)).unwrap();
+		assert_eq!(err, 0);
+
+		if rand::random() {
+			drop(child);
+		} else {
+			sys::signal::kill(child.pid, sys::signal::SIGKILL).unwrap();
 		}
-	};
-	unistd::close(write).unwrap();
-	let err = unistd::read(read, &mut [0]).unwrap();
-	assert_eq!(err, 1);
-
-	let mut flags =
-		fcntl::OFlag::from_bits_truncate(fcntl::fcntl(read, fcntl::FcntlArg::F_GETFL).unwrap());
-	flags |= fcntl::OFlag::O_NONBLOCK;
-	let err = fcntl::fcntl(read, fcntl::FcntlArg::F_SETFL(flags)).unwrap();
-	assert_eq!(err, 0);
-	let err = unistd::read(read, &mut [0]);
-	assert_eq!(err, Err(nix::Error::Sys(nix::errno::Errno::EAGAIN)));
-	flags &= !fcntl::OFlag::O_NONBLOCK;
-	let err = fcntl::fcntl(read, fcntl::FcntlArg::F_SETFL(flags)).unwrap();
-	assert_eq!(err, 0);
-
-	if rand::random() {
-		drop(child);
-	} else {
-		sys::signal::kill(child.pid, sys::signal::SIGKILL).unwrap();
-	}
-	let err = unistd::read(read, &mut [0]).unwrap();
-	assert_eq!(err, 0);
-	unistd::close(read).unwrap();
+		let err = unistd::read(read, &mut [0]).unwrap();
+		assert_eq!(err, 0);
+		unistd::close(read).unwrap();
+	})
 }
 
 fn run(threads: usize, iterations: usize) {
@@ -88,7 +89,6 @@ fn run(threads: usize, iterations: usize) {
 	done.store(true, Ordering::Relaxed);
 }
 
-#[test]
 fn multithreaded() {
 	abort_on_unwind(|| {
 		assert_dead(|| {
@@ -111,7 +111,6 @@ fn multithreaded() {
 	})
 }
 
-#[test]
 fn group_kill() {
 	abort_on_unwind(|| {
 		assert_dead(|| {
@@ -139,6 +138,14 @@ fn group_kill() {
 			}
 		})
 	})
+}
+
+// Run sequentially
+#[test]
+fn tests() {
+	kills_grandchild();
+	multithreaded();
+	group_kill();
 }
 
 fn assert_dead<R>(f: impl FnOnce() -> R) -> R {
