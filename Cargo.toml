@@ -55,3 +55,6 @@ rand = "0.7"
 [[test]]
 name = "fd_iter"
 harness = false
+[[test]]
+name = "fork"
+harness = false

@@ -2,12 +2,12 @@
 
 #[cfg(unix)]
 use nix::{
-	cmsg_space, errno::Errno, fcntl, libc, sys::socket, sys::uio, sys::{signal, wait}, unistd::{self, Pid}, Error
+	errno::Errno, fcntl, libc, sys::{signal, wait}, unistd::{self, Pid}, Error
 };
 use std::process::Command;
 #[cfg(unix)]
 use std::{
-	os::unix::io::AsRawFd, os::unix::net::UnixDatagram, sync::atomic::{AtomicU8, Ordering}
+	os::unix::net::UnixDatagram, sync::atomic::{AtomicU8, Ordering}
 };
 
 #[cfg(unix)]
@@ -122,6 +122,7 @@ impl ChildHandle {
 		let signal = signal.into();
 		#[cfg(target_os = "freebsd")]
 		{
+			assert_ne!(self.pd, i32::max_value(), "todo");
 			let res = unsafe {
 				libc::pdkill(
 					self.pd,
@@ -165,7 +166,11 @@ impl Drop for ChildHandle {
 			unistd::close(self.owns.as_mut().unwrap().eternal_write).unwrap();
 		}
 		#[cfg(target_os = "freebsd")]
-		unistd::close(self.pd).unwrap();
+		{
+			if self.pd != i32::max_value() {
+				unistd::close(self.pd).unwrap();
+			}
+		}
 	}
 }
 
@@ -268,27 +273,33 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 				let old = unsafe { signal::sigaction(signal::SIGCHLD, &new).unwrap() };
 				let pid = unistd::getpid();
 				let group = unistd::getpgrp();
-				let (eternal_read, eternal_write) = file::pipe(fcntl::OFlag::empty()).unwrap();
 				let our_group_retainer = if group != pid {
+					let (temp_read, temp_write) = file::pipe(fcntl::OFlag::empty()).unwrap();
 					let child = if let ForkResult::Parent(child) = basic_fork(false)? {
 						child
 					} else {
 						drop(ready_write);
-						unistd::close(eternal_write).unwrap();
-						let err = unistd::read(eternal_read, &mut [0]).unwrap();
+						unistd::close(temp_write).unwrap();
+						let err = unistd::read(temp_read, &mut [0]).unwrap();
 						assert_eq!(err, 0);
 						signal::kill(unistd::getpid(), signal::SIGKILL).unwrap();
 						loop {}
 					};
+					unistd::close(temp_read).unwrap();
 					unistd::setpgid(unistd::Pid::from_raw(0), unistd::Pid::from_raw(0)).unwrap();
-					Some(child)
+					Some((child, temp_write))
 				} else {
 					None
 				};
-				let _our_pid_retainer = if let ForkResult::Parent(child) = basic_fork(false)? {
+				let (eternal_read, eternal_write) = file::pipe(fcntl::OFlag::empty()).unwrap();
+				let our_pid_retainer = if let ForkResult::Parent(child) = basic_fork(false)? {
 					child
 				} else {
+					ignore_signals();
 					drop(ready_write);
+					if let Some((_retainer, temp_write)) = &our_group_retainer {
+						unistd::close(*temp_write).unwrap();
+					}
 					unistd::close(eternal_write).unwrap();
 					for fd in 0..1024 {
 						// TODO // && fd > 2 {
@@ -304,36 +315,29 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 					loop {}
 				};
 				unistd::close(eternal_read).unwrap();
-				let iov = [uio::IoVec::from_slice(&[])];
-				let fds = [eternal_write];
-				let cmsg = [socket::ControlMessage::ScmRights(&fds)];
-				let _ = socket::sendmsg(
-					ready_write.as_raw_fd(),
-					&iov,
-					&cmsg,
-					socket::MsgFlags::empty(),
-					None,
-				)
-				.map(|x| {
-					assert_eq!(x, 0);
+				send_fd::send_fd(eternal_write, &ready_write).unwrap_or_else(|_| {
+					if let Some((retainer, temp_write)) = &our_group_retainer {
+						unistd::close(*temp_write).unwrap();
+						let _ = signal::kill(retainer.pid, signal::SIGKILL);
+					}
+					let _ = signal::kill(our_pid_retainer.pid, signal::SIGKILL);
+					signal::kill(unistd::getpid(), signal::SIGKILL).unwrap();
+					loop {}
 				});
 				drop(ready_write);
-				#[cfg(any(target_os = "macos", target_os = "ios"))]
-				let _ = std::thread::spawn(move || {
-					std::thread::sleep(std::time::Duration::from_millis(10));
-					unistd::close(eternal_write).unwrap();
-				});
-				#[cfg(not(any(target_os = "macos", target_os = "ios")))]
 				unistd::close(eternal_write).unwrap();
-				if let Some(retainer) = our_group_retainer {
+				if let Some((retainer, temp_write)) = our_group_retainer {
 					unistd::getpgid(Some(retainer.pid))
 						.and_then(|group| unistd::setpgid(unistd::Pid::from_raw(0), group))
-						.and_then(|_| unistd::getpgid(Some(retainer.pid)).map(drop))
+						.and_then(|_| signal::kill(retainer.pid, None))
 						.unwrap_or_else(|_| {
+							unistd::close(temp_write).unwrap();
+							let _ = signal::kill(retainer.pid, signal::SIGKILL);
+							let _ = signal::kill(our_pid_retainer.pid, signal::SIGKILL);
 							signal::kill(unistd::getpid(), signal::SIGKILL).unwrap();
 							loop {}
 						});
-					signal::kill(retainer.pid, signal::SIGKILL).unwrap();
+					let _ = signal::kill(retainer.pid, signal::SIGKILL);
 					let _ = retainer.wait().unwrap();
 				}
 				if new.handler() != old.handler() {
@@ -344,27 +348,10 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 			}
 			ForkResult::Parent(mut child) => {
 				drop(ready_write);
-				let mut buf = [0; 8];
-				let iovec = [uio::IoVec::from_mut_slice(&mut buf)];
-				let mut space = cmsg_space!([Fd; 2]);
-				let eternal_write = socket::recvmsg(
-					ready_read.as_raw_fd(),
-					&iovec,
-					Some(&mut space),
-					socket::MsgFlags::empty(),
-				)
-				.map(|msg| {
-					let mut iter = msg.cmsgs();
-					match (iter.next(), iter.next()) {
-						(Some(socket::ControlMessageOwned::ScmRights(fds)), None) => {
-							assert_eq!(msg.bytes, 0);
-							assert_eq!(fds.len(), 1);
-							fds[0]
-						}
-						_ => panic!(),
-					}
-				})
-				.unwrap();
+				let eternal_write = send_fd::receive_fd(&ready_read).unwrap_or_else(|_| {
+					signal::kill(unistd::getpid(), signal::SIGKILL).unwrap();
+					loop {}
+				});
 				drop(ready_read);
 				child.owns = Some(Handle {
 					state: AtomicU8::new(0),
@@ -402,6 +389,100 @@ fn basic_fork(may_outlive: bool) -> nix::Result<ForkResult> {
 				pid: child,
 				owns: None,
 			}),
+		})
+	}
+}
+
+#[cfg(unix)]
+fn ignore_signals() {
+	let new = signal::SigAction::new(
+		signal::SigHandler::SigIgn,
+		signal::SaFlags::empty(),
+		signal::SigSet::empty(),
+	);
+	for signal in signal::Signal::iterator() {
+		if signal == signal::Signal::SIGKILL || signal == signal::Signal::SIGSTOP {
+			continue;
+		}
+		let _ = unsafe { signal::sigaction(signal, &new) };
+	}
+}
+
+#[cfg(unix)]
+mod send_fd {
+	#![allow(trivial_casts)]
+
+	use libc;
+	use nix::errno::Errno;
+	use std::{
+		convert::TryInto, mem, os::unix::{
+			io::{AsRawFd, RawFd}, net::UnixDatagram
+		}, ptr::{read_unaligned, write_unaligned}
+	};
+
+	const BUF_SIZE: usize = 32; // mac is 16, linux 20, should be big enough everywhere?
+
+	// https://github.com/Aaron1011/spawn-pidfd/blob/44c40733905b0d793ac8393079ecb393774cedda/src/lib.rs#L63-L123
+	pub fn send_fd(fd: RawFd, sock: &UnixDatagram) -> nix::Result<()> {
+		let mut msg: libc::msghdr = unsafe { mem::zeroed() };
+		let fds: [libc::c_int; 1] = [fd];
+		let buf_size = unsafe {
+			libc::CMSG_SPACE(std::mem::size_of::<[libc::c_int; 1]>().try_into().unwrap()) as usize
+		};
+		assert!(BUF_SIZE >= buf_size, "{} < {}", BUF_SIZE, buf_size);
+		let mut buf: [libc::c_char; BUF_SIZE] = unsafe { mem::zeroed() };
+
+		msg.msg_control = buf.as_mut_ptr() as *mut libc::c_void;
+		msg.msg_controllen = mem::size_of_val(&buf).try_into().unwrap();
+
+		let mut iov: [libc::iovec; 1] = unsafe { mem::zeroed() };
+		iov[0].iov_base = &mut () as *mut _ as *mut libc::c_void;
+		iov[0].iov_len = 0;
+
+		msg.msg_iov = iov.as_mut_ptr();
+		msg.msg_iovlen = 1;
+
+		let cmsg: *mut libc::cmsghdr;
+		unsafe {
+			cmsg = libc::CMSG_FIRSTHDR(&msg);
+			(*cmsg).cmsg_level = libc::SOL_SOCKET;
+			(*cmsg).cmsg_type = libc::SCM_RIGHTS;
+			(*cmsg).cmsg_len =
+				(libc::CMSG_LEN((mem::size_of::<[libc::c_int; 1]>()).try_into().unwrap())
+					as libc::size_t)
+					.try_into()
+					.unwrap();
+			#[allow(clippy::cast_ptr_alignment)]
+			write_unaligned(libc::CMSG_DATA(cmsg) as *mut libc::c_int, fds[0]);
+			msg.msg_controllen = (*cmsg).cmsg_len;
+
+			let ret = libc::sendmsg(sock.as_raw_fd(), &msg, 0);
+			Errno::result(ret).map(drop)
+		}
+	}
+	pub fn receive_fd(sock: &UnixDatagram) -> nix::Result<RawFd> {
+		let mut msg: libc::msghdr = unsafe { mem::zeroed() };
+		let buf_size = unsafe {
+			libc::CMSG_SPACE(std::mem::size_of::<[libc::c_int; 1]>().try_into().unwrap()) as usize
+		};
+		assert!(BUF_SIZE >= buf_size, "{} < {}", BUF_SIZE, buf_size);
+		let mut buf: [libc::c_char; BUF_SIZE] = unsafe { mem::zeroed() };
+
+		let mut dummy: libc::c_char = 0;
+		let mut iov: [libc::iovec; 1] = unsafe { mem::zeroed() };
+		iov[0].iov_base = &mut dummy as *mut _ as *mut libc::c_void;
+		iov[0].iov_len = 1;
+
+		msg.msg_iov = iov.as_mut_ptr();
+		msg.msg_iovlen = 1;
+		msg.msg_control = buf.as_mut_ptr() as *mut libc::c_void;
+		msg.msg_controllen = mem::size_of_val(&buf).try_into().unwrap();
+		let ret = unsafe { libc::recvmsg(sock.as_raw_fd(), &mut msg as *mut libc::msghdr, 0) };
+		Errno::result(ret).map(|_r| {
+			let cmsg = unsafe { libc::CMSG_FIRSTHDR(&msg) };
+			#[allow(clippy::cast_ptr_alignment)]
+			let fd = unsafe { read_unaligned(libc::CMSG_DATA(cmsg) as *mut libc::c_int) };
+			fd
 		})
 	}
 }
