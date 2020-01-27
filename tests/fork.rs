@@ -147,7 +147,6 @@ mod fork {
 				};
 				signal::kill(Pid::from_raw(-child.pid.as_raw()), signal).unwrap(); // or SIGHUP SIGINT SIGTERM
 				child.wait().unwrap();
-				mem::forget(child);
 			}
 		})
 	}
