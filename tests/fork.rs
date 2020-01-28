@@ -104,7 +104,10 @@ mod fork {
 			let as_group_leader = pid == group;
 			run(10, 10_000);
 
-			assert_eq!(palaver::thread::count(), 1);
+			// retry because for some reason it can lag on linux
+			while palaver::thread::count() != 1 {
+				sleep(Duration::from_millis(1))
+			}
 			if let ForkResult::Parent(child) = fork(false).unwrap() {
 				child.wait().unwrap();
 			} else {
