@@ -69,7 +69,7 @@ pub struct ChildHandle {
 struct Handle {
 	state: AtomicU8, // 0, 1 = killed, 2 = reaped
 	#[cfg(not(target_os = "freebsd"))]
-	eternal_write: Fd,
+	guard_write: Fd,
 }
 
 /// Possible return values from [`ChildHandle::wait`].
@@ -163,7 +163,7 @@ impl Drop for ChildHandle {
 			let group = Pid::from_raw(-self.pid.as_raw());
 			let _ = signal::kill(group, signal::SIGKILL);
 			#[cfg(not(target_os = "freebsd"))]
-			unistd::close(self.owns.as_mut().unwrap().eternal_write).unwrap();
+			unistd::close(self.owns.as_mut().unwrap().guard_write).unwrap();
 		}
 		#[cfg(target_os = "freebsd")]
 		{
@@ -291,7 +291,7 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 				} else {
 					None
 				};
-				let (eternal_read, eternal_write) = file::pipe(fcntl::OFlag::empty()).unwrap();
+				let (guard_read, guard_write) = file::pipe(fcntl::OFlag::empty()).unwrap();
 				let our_pid_retainer = if let ForkResult::Parent(child) = basic_fork(false)? {
 					child
 				} else {
@@ -300,22 +300,22 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 					if let Some((_retainer, temp_write)) = &our_group_retainer {
 						unistd::close(*temp_write).unwrap();
 					}
-					unistd::close(eternal_write).unwrap();
+					unistd::close(guard_write).unwrap();
 					for fd in 0..1024 {
 						// TODO // && fd > 2 {
-						if fd != eternal_read {
+						if fd != guard_read {
 							let _ = unistd::close(fd);
 						}
 					}
-					let err = unistd::read(eternal_read, &mut [0]).unwrap();
+					let err = unistd::read(guard_read, &mut [0]).unwrap();
 					assert_eq!(err, 0);
 					assert_eq!(unistd::getpgrp(), pid);
 					let _ = signal::kill(pid, signal::SIGKILL);
 					signal::kill(unistd::getpid(), signal::SIGKILL).unwrap();
 					loop {}
 				};
-				unistd::close(eternal_read).unwrap();
-				send_fd::send_fd(eternal_write, &ready_write).unwrap_or_else(|_| {
+				unistd::close(guard_read).unwrap();
+				send_fd::send_fd(guard_write, &ready_write).unwrap_or_else(|_| {
 					if let Some((retainer, temp_write)) = &our_group_retainer {
 						unistd::close(*temp_write).unwrap();
 						let _ = signal::kill(retainer.pid, signal::SIGKILL);
@@ -325,7 +325,7 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 					loop {}
 				});
 				drop(ready_write);
-				unistd::close(eternal_write).unwrap();
+				unistd::close(guard_write).unwrap();
 				if let Some((retainer, temp_write)) = our_group_retainer {
 					unistd::getpgid(Some(retainer.pid))
 						.and_then(|group| unistd::setpgid(unistd::Pid::from_raw(0), group))
@@ -348,7 +348,7 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 			}
 			ForkResult::Parent(mut child) => {
 				drop(ready_write);
-				let eternal_write = send_fd::receive_fd(&ready_read).unwrap_or_else(|_| {
+				let guard_write = send_fd::receive_fd(&ready_read).unwrap_or_else(|_| {
 					signal::kill(unistd::getpid(), signal::SIGKILL).unwrap();
 					loop {}
 				});
@@ -356,9 +356,9 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 				child.owns = Some(Handle {
 					state: AtomicU8::new(0),
 					#[cfg(not(target_os = "freebsd"))]
-					eternal_write,
+					guard_write,
 				});
-				let _ = eternal_write;
+				let _ = guard_write;
 				ForkResult::Parent(child)
 			}
 		})
