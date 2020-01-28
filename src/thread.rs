@@ -66,8 +66,9 @@ pub fn gettid() -> u64 {
 pub fn count() -> usize {
 	#[cfg(any(target_os = "android", target_os = "linux"))]
 	{
-		procinfo::pid::stat_self()
+		procfs::process::Process::myself()
 			.unwrap()
+			.stat
 			.num_threads
 			.try_into()
 			.unwrap()

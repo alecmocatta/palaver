@@ -1,6 +1,6 @@
 [package]
 name = "palaver"
-version = "0.2.8"
+version = "0.3.0-alpha.1"
 license = "MIT OR Apache-2.0"
 authors = ["Alec Mocatta <alec@mocatta.net>"]
 categories = ["os::unix-apis","os::windows-apis","os::macos-apis"]
@@ -12,7 +12,7 @@ This library attempts to provide reliable polyfills for functionality that isn't
 """
 repository = "https://github.com/alecmocatta/palaver"
 homepage = "https://github.com/alecmocatta/palaver"
-documentation = "https://docs.rs/palaver/0.2.8"
+documentation = "https://docs.rs/palaver/0.3.0-alpha.1"
 readme = "README.md"
 edition = "2018"
 
@@ -23,16 +23,20 @@ maintenance = { status = "actively-developed" }
 [features]
 nightly = ["valgrind_request"]
 
+[package.metadata.docs.rs]
+all-features = true
+
 [dependencies]
 bitflags = "1.0"
 heapless = "0.5"
 lazy_static = "1.0"
+replace_with = "0.1"
 typenum = "1.10"
 valgrind_request = { version = "1.1", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.47"
-nix = "0.15"
+nix = "0.16"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["processthreadsapi"] }
@@ -41,16 +45,16 @@ winapi = { version = "0.3", features = ["processthreadsapi"] }
 mach = "0.3"
 
 [target.'cfg(any(target_os = "android", target_os = "linux"))'.dependencies]
-procinfo = "0.4"
+procfs = { version = "0.7", default-features = false }
 
 [dev-dependencies]
 serde_json = "1.0"
 escargot = "0.5"
-
-[package.metadata.docs.rs]
-all-features = true
+rand = "0.7"
 
 [[test]]
 name = "fd_iter"
-path = "tests/fd_iter.rs"
+harness = false
+[[test]]
+name = "fork"
 harness = false
