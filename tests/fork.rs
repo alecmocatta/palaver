@@ -171,6 +171,7 @@ mod fork {
 		std::env::set_current_dir(&tmpdir).unwrap();
 		let ret = f();
 		std::env::set_current_dir("..").unwrap();
+		sleep(Duration::from_millis(1000)); // might help reduce flakiness?
 		let out = std::process::Command::new("lsof")
 			.arg(&tmpdir)
 			.output()
