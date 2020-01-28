@@ -274,7 +274,7 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 				let pid = unistd::getpid();
 				let group = unistd::getpgrp();
 				let our_group_retainer = if group != pid {
-					let (temp_read, temp_write) = file::pipe(fcntl::OFlag::empty()).unwrap();
+					let (temp_read, temp_write) = file::pipe(fcntl::OFlag::O_CLOEXEC).unwrap();
 					let child = if let ForkResult::Parent(child) = basic_fork(false)? {
 						child
 					} else {
@@ -291,7 +291,7 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 				} else {
 					None
 				};
-				let (guard_read, guard_write) = file::pipe(fcntl::OFlag::empty()).unwrap();
+				let (guard_read, guard_write) = file::pipe(fcntl::OFlag::O_CLOEXEC).unwrap();
 				let our_pid_retainer = if let ForkResult::Parent(child) = basic_fork(false)? {
 					child
 				} else {
