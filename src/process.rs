@@ -274,7 +274,7 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 				let pid = unistd::getpid();
 				let group = unistd::getpgrp();
 				let our_group_retainer = if group != pid {
-					let (temp_read, temp_write) = file::pipe(fcntl::OFlag::empty()).unwrap();
+					let (temp_read, temp_write) = file::pipe(fcntl::OFlag::O_CLOEXEC).unwrap();
 					let child = if let ForkResult::Parent(child) = basic_fork(false)? {
 						child
 					} else {
@@ -291,11 +291,20 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 				} else {
 					None
 				};
-				let (guard_read, guard_write) = file::pipe(fcntl::OFlag::empty()).unwrap();
+				let (guard_read, guard_write) = file::pipe(fcntl::OFlag::O_CLOEXEC).unwrap();
+				let mut prev = signal::SigSet::empty();
+				signal::sigprocmask(
+					signal::SigmaskHow::SIG_BLOCK,
+					Some(&signal::SigSet::all()),
+					Some(&mut prev),
+				)
+				.unwrap();
 				let our_pid_retainer = if let ForkResult::Parent(child) = basic_fork(false)? {
 					child
 				} else {
 					ignore_signals();
+					signal::sigprocmask(signal::SigmaskHow::SIG_SETMASK, Some(&prev), None)
+						.unwrap();
 					drop(ready_write);
 					if let Some((_retainer, temp_write)) = &our_group_retainer {
 						unistd::close(*temp_write).unwrap();
@@ -314,6 +323,7 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 					signal::kill(unistd::getpid(), signal::SIGKILL).unwrap();
 					loop {}
 				};
+				signal::sigprocmask(signal::SigmaskHow::SIG_SETMASK, Some(&prev), None).unwrap();
 				unistd::close(guard_read).unwrap();
 				send_fd::send_fd(guard_write, &ready_write).unwrap_or_else(|_| {
 					if let Some((retainer, temp_write)) = &our_group_retainer {
@@ -370,7 +380,12 @@ fn basic_fork(may_outlive: bool) -> nix::Result<ForkResult> {
 	#[cfg(target_os = "freebsd")]
 	{
 		let mut pd = -1;
-		let res = unsafe { libc::pdfork(&mut pd, if may_outlive { libc::PD_DAEMON } else { 0 }) };
+		let res = unsafe {
+			libc::pdfork(
+				&mut pd,
+				libc::PD_CLOEXEC | if may_outlive { libc::PD_DAEMON } else { 0 },
+			)
+		};
 		Errno::result(res).map(|res| match res {
 			0 => ForkResult::Child,
 			pid => ForkResult::Parent(ChildHandle {
@@ -412,7 +427,6 @@ fn ignore_signals() {
 mod send_fd {
 	#![allow(trivial_casts)]
 
-	use libc;
 	use nix::errno::Errno;
 	use std::{
 		convert::TryInto, mem, os::unix::{
