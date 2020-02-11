@@ -231,18 +231,17 @@ pub fn memfd_create(name: &CStr, cloexec: bool) -> nix::Result<Fd> {
 			let name = heapless_string_to_cstr(&mut name);
 			fcntl::open(
 				name,
-				OFlag::O_RDWR | OFlag::O_CREAT | OFlag::O_EXCL,
+				OFlag::O_RDWR
+					| OFlag::O_CREAT | OFlag::O_EXCL
+					| if cloexec {
+						OFlag::O_CLOEXEC
+					} else {
+						OFlag::empty()
+					},
 				stat::Mode::S_IRWXU,
 			)
 			.map(|fd| {
 				unistd::unlink(name).unwrap();
-				if cloexec {
-					let mut flags_ =
-						FdFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap())
-							.unwrap();
-					flags_.insert(FdFlag::FD_CLOEXEC);
-					let _ = fcntl::fcntl(fd, fcntl::FcntlArg::F_SETFD(flags_)).unwrap();
-				}
 				fd
 			})
 		})
@@ -305,114 +304,155 @@ fn tmpfile(
 	ret
 }
 
-/// Falls back to execve("/proc/self/fd/{fd}",...), falls back to execve("/tmp/{randomfilename}")
+/// Falls back to execve("/proc/self/fd/{fd}",...), falls back to execve("/tmp/{hash}")
 #[cfg(unix)]
 pub fn fexecve(fd: Fd, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infallible> {
-	#[cfg(any(target_os = "android", target_os = "freebsd", target_os = "linux"))]
-	{
-		let args: heapless::Vec<*const libc::c_char, heapless::consts::U256> = args
-			.iter()
-			.map(|arg| arg.as_ptr())
-			.chain(iter::once(std::ptr::null()))
-			.collect();
-		let vars: heapless::Vec<*const libc::c_char, heapless::consts::U256> = vars
-			.iter()
-			.map(|arg| arg.as_ptr())
-			.chain(iter::once(std::ptr::null()))
-			.collect();
-
-		let _ = unsafe { libc::fexecve(fd, args.as_ptr(), vars.as_ptr()) };
-
-		Err(nix::Error::Sys(nix::errno::Errno::last()))
-	}
-	#[cfg(all(
-		unix,
-		not(any(target_os = "android", target_os = "freebsd", target_os = "linux"))
+	let mut res = Err(nix::Error::Sys(nix::errno::Errno::ENOSYS));
+	#[cfg(any(
+		target_os = "android",
+		target_os = "freebsd",
+		target_os = "fuchsia",
+		target_os = "illumos",
+		target_os = "linux",
+		target_os = "solaris"
 	))]
 	{
-		// Things tried but not helping on Mac:
-		// extern "C" {
-		// 	#[cfg_attr(
-		// 		all(target_os = "macos", target_arch = "x86"),
-		// 		link_name = "lchmod$UNIX2003"
-		// 	)]
-		// 	pub fn lchmod(path: *const libc::c_char, mode: libc::mode_t) -> libc::c_int;
-		// }
-		// let res = unsafe { libc::fchmod(fd, stat::Mode::S_IRWXU.bits() as libc::mode_t) };
-		// assert_eq!(res, 0);
-		// nix::errno::Errno::result(res).map(drop).unwrap();
-		// const O_SYMLINK: i32 = 0x200000;
-		// let x = unsafe { libc::open(path.as_ptr(), O_SYMLINK) };
-		// assert_ne!(x, -1);
-		// let res = unsafe { libc::fchmod(x, stat::Mode::S_IRWXU.bits() as libc::mode_t) };
-		// assert_eq!(res, 0);
-		// nix::errno::Errno::result(res).map(drop).unwrap();
-		// let res = unsafe { lchmod(path.as_ptr(), stat::Mode::S_IRWXU.bits() as libc::mode_t) };
-		// assert_eq!(res, 0);
-		// nix::errno::Errno::result(res).map(drop).unwrap();
-		// println!("{:?}", nix::sys::stat::stat(&*path).unwrap());
-		// println!("{:?}", nix::sys::stat::lstat(&*path).unwrap());
-		// let to_path_cstr = CString::new(<OsString as OsStringExt>::into_vec(to_path.clone().into())).unwrap();
-		// let res = unsafe { libc::linkat(libc::AT_FDCWD, to_path_cstr.as_ptr(), libc::AT_FDCWD, path.as_ptr(), libc::AT_SYMLINK_FOLLOW) };
-		// nix::errno::Errno::result(res).map(drop)?;
+		res = res.or_else(|_| {
+			let args: heapless::Vec<*const libc::c_char, heapless::consts::U256> = args
+				.iter()
+				.map(|arg| arg.as_ptr())
+				.chain(iter::once(std::ptr::null()))
+				.collect();
+			let vars: heapless::Vec<*const libc::c_char, heapless::consts::U256> = vars
+				.iter()
+				.map(|arg| arg.as_ptr())
+				.chain(iter::once(std::ptr::null()))
+				.collect();
 
+			let _ = unsafe { libc::fexecve(fd, args.as_ptr(), vars.as_ptr()) };
+
+			Err(nix::Error::Sys(nix::errno::Errno::last()))
+		});
+	}
+	if res == Err(nix::Error::Sys(nix::errno::Errno::ENOSYS)) {
 		let mut path = fd_path_heapless(fd).unwrap();
 		let path = heapless_string_to_cstr(&mut path);
-		execve(&path, args, vars).or_else(|_e| {
-			let mut to_path = tmpfile(&"/tmp/".into());
-			let to_path = heapless_string_to_cstr(&mut to_path);
-			let to = fcntl::open(
-				to_path,
-				OFlag::O_RDWR | OFlag::O_CREAT | OFlag::O_EXCL,
-				stat::Mode::S_IRWXU,
-			)
-			.map(|fd| {
-				let cloexec = true;
-				if cloexec {
-					let mut flags_ =
-						FdFlag::from_bits(fcntl::fcntl(fd, fcntl::FcntlArg::F_GETFD).unwrap())
-							.unwrap();
-					flags_.insert(FdFlag::FD_CLOEXEC);
-					let _ = fcntl::fcntl(fd, fcntl::FcntlArg::F_SETFD(flags_)).unwrap();
-				}
-				fd
-			})
-			.unwrap();
-			let mut from = unsafe { fs::File::from_raw_fd(fd) };
-			let mut to = unsafe { fs::File::from_raw_fd(to) };
-			let pos = io::Seek::seek(&mut from, io::SeekFrom::Current(0)).unwrap();
-			let x = io::Seek::seek(&mut from, io::SeekFrom::Start(0)).unwrap();
-			assert_eq!(x, 0);
-			let _ = io::copy(&mut from, &mut to).unwrap(); // copyfile?
-			let x = io::Seek::seek(&mut from, io::SeekFrom::Start(pos)).unwrap();
-			assert_eq!(x, pos);
-			assert_eq!(from.metadata().unwrap().len(), to.metadata().unwrap().len());
-			let (read, write) = pipe(OFlag::O_CLOEXEC).unwrap();
-			if let unistd::ForkResult::Parent { .. } = unistd::fork().expect("Fork failed") {
-				unistd::close(read).unwrap();
-				execve(to_path, args, vars).map_err(|e| {
-					let _ = unistd::write(write, &[0]).unwrap();
-					unistd::close(write).unwrap();
-					unistd::unlink(to_path).unwrap();
-					e
-				})
-			} else {
-				unistd::close(write).unwrap();
-				match unistd::read(read, &mut [0, 0]) {
-					Ok(1) => unsafe { libc::_exit(0) },
-					Ok(0) => {
-						// constellation currently relies upon current_exe() on mac not having been deleted
-						// unistd::unlink(to_path.as_path()).unwrap();
-						unsafe { libc::_exit(0) }
-					}
-					e => panic!("{:?}", e),
-				}
-			}
-		})
+		res = execve(&path, args, vars);
+		if res.is_err() {
+			res = Err(nix::Error::Sys(nix::errno::Errno::ENOSYS));
+		}
 	}
-	#[cfg(windows)]
-	{
-		Err(unimplemented!())
+	if res == Err(nix::Error::Sys(nix::errno::Errno::ENOSYS)) {
+		res = fexecve_fallback(fd, args, vars);
+	}
+	res
+}
+
+#[cfg(unix)]
+fn fexecve_fallback(fd: Fd, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infallible> {
+	// Things tried but not helping on Mac:
+	// extern "C" {
+	// 	#[cfg_attr(
+	// 		all(target_os = "macos", target_arch = "x86"),
+	// 		link_name = "lchmod$UNIX2003"
+	// 	)]
+	// 	pub fn lchmod(path: *const libc::c_char, mode: libc::mode_t) -> libc::c_int;
+	// }
+	// let res = unsafe { libc::fchmod(fd, stat::Mode::S_IRWXU.bits() as libc::mode_t) };
+	// assert_eq!(res, 0);
+	// nix::errno::Errno::result(res).map(drop).unwrap();
+	// const O_SYMLINK: i32 = 0x200000;
+	// let x = unsafe { libc::open(path.as_ptr(), O_SYMLINK) };
+	// assert_ne!(x, -1);
+	// let res = unsafe { libc::fchmod(x, stat::Mode::S_IRWXU.bits() as libc::mode_t) };
+	// assert_eq!(res, 0);
+	// nix::errno::Errno::result(res).map(drop).unwrap();
+	// let res = unsafe { lchmod(path.as_ptr(), stat::Mode::S_IRWXU.bits() as libc::mode_t) };
+	// assert_eq!(res, 0);
+	// nix::errno::Errno::result(res).map(drop).unwrap();
+	// println!("{:?}", nix::sys::stat::stat(&*path).unwrap());
+	// println!("{:?}", nix::sys::stat::lstat(&*path).unwrap());
+	// let to_path_cstr = CString::new(<OsString as OsStringExt>::into_vec(to_path.clone().into())).unwrap();
+	// let res = unsafe { libc::linkat(libc::AT_FDCWD, to_path_cstr.as_ptr(), libc::AT_FDCWD, path.as_ptr(), libc::AT_SYMLINK_FOLLOW) };
+	// nix::errno::Errno::result(res).map(drop)?;
+
+	use std::hash::Hasher;
+	struct HashWriter<T: Hasher, W: Write>(T, W);
+	impl<T: Hasher, W: Write> Write for HashWriter<T, W> {
+		fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+			self.1.write(buf).map(|written| {
+				self.0.write(&buf[..written]);
+				written
+			})
+		}
+		fn flush(&mut self) -> io::Result<()> {
+			self.1.flush()
+		}
+	}
+
+	let tmp =
+		fcntl::open("/tmp", OFlag::O_CLOEXEC, stat::Mode::empty()).expect("couldn't open /tmp");
+	let mut to_path = tmpfile(&"".into());
+	let to_path = heapless_string_to_cstr(&mut to_path);
+	let to = fcntl::openat(
+		tmp,
+		to_path,
+		OFlag::O_RDWR | OFlag::O_CREAT | OFlag::O_EXCL | OFlag::O_CLOEXEC,
+		stat::Mode::S_IRWXU,
+	)
+	.unwrap();
+	let mut from = unsafe { fs::File::from_raw_fd(fd) };
+	let mut to = unsafe { fs::File::from_raw_fd(to) };
+	let pos = io::Seek::seek(&mut from, io::SeekFrom::Current(0)).unwrap();
+	let x = io::Seek::seek(&mut from, io::SeekFrom::Start(0)).unwrap();
+	assert_eq!(x, 0);
+	let mut hasher = twox_hash::XxHash::with_seed(0);
+	let _ = io::copy(&mut from, &mut HashWriter(&mut hasher, &mut to)).unwrap(); // copyfile?
+	let x = io::Seek::seek(&mut from, io::SeekFrom::Start(pos)).unwrap();
+	assert_eq!(x, pos);
+	assert_eq!(from.metadata().unwrap().len(), to.metadata().unwrap().len());
+	let mut hash: [u8; 16] = [0; 16];
+	hash[..8].copy_from_slice(&hasher.finish().to_ne_bytes());
+	hasher.write_u8(0);
+	hash[8..].copy_from_slice(&hasher.finish().to_ne_bytes());
+	let mut to_path2: heapless::String<heapless::consts::U33> = heapless::String::new();
+	std::fmt::Write::write_fmt(&mut to_path2, format_args!("{}", hash.to_hex())).unwrap();
+	let to_path2 = heapless_string_to_cstr(&mut to_path2);
+	fcntl::renameat(Some(tmp), to_path, Some(tmp), to_path2).unwrap();
+	let to_path = to_path2;
+	let mut to_path_full: heapless::String<
+		typenum::operator_aliases::Sum<heapless::consts::U6, heapless::consts::U32>,
+	> = "/tmp/".into();
+	to_path_full.push_str(to_path.to_str().unwrap()).unwrap();
+	let to_path_full = heapless_string_to_cstr(&mut to_path_full);
+	let (read, write) = pipe(OFlag::O_CLOEXEC).unwrap();
+	if let unistd::ForkResult::Parent { .. } = unistd::fork().expect("Fork failed") {
+		unistd::close(read).unwrap();
+		execve(to_path_full, args, vars).map_err(|e| {
+			let _ = unistd::write(write, &[0]).unwrap();
+			unistd::close(write).unwrap();
+			unistd::unlinkat(Some(tmp), to_path, unistd::UnlinkatFlags::NoRemoveDir).unwrap();
+			unistd::close(tmp).unwrap();
+			e
+		})
+	} else {
+		unistd::close(write).unwrap();
+		match unistd::read(read, &mut [0, 0]) {
+			Ok(1) => unsafe {
+				unistd::close(tmp).unwrap();
+				libc::_exit(0)
+			},
+			Ok(0) => {
+				// constellation currently relies upon current_exe() on mac not having been deleted
+				// unistd::unlinkat(tmp, to_path).unwrap();
+				unistd::close(tmp).unwrap();
+				unsafe { libc::_exit(0) }
+			}
+			e => {
+				unistd::close(tmp).unwrap();
+				panic!("{:?}", e)
+			}
+		}
 	}
 }
 

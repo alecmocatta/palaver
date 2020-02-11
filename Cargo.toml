@@ -1,6 +1,6 @@
 [package]
 name = "palaver"
-version = "0.3.0-alpha.2"
+version = "0.3.0-alpha.3"
 license = "MIT OR Apache-2.0"
 authors = ["Alec Mocatta <alec@mocatta.net>"]
 categories = ["os::unix-apis","os::windows-apis","os::macos-apis"]
@@ -12,7 +12,7 @@ This library attempts to provide reliable polyfills for functionality that isn't
 """
 repository = "https://github.com/alecmocatta/palaver"
 homepage = "https://github.com/alecmocatta/palaver"
-documentation = "https://docs.rs/palaver/0.3.0-alpha.2"
+documentation = "https://docs.rs/palaver/0.3.0-alpha.3"
 readme = "README.md"
 edition = "2018"
 
@@ -37,6 +37,7 @@ valgrind_request = { version = "1.1", optional = true }
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.47"
 nix = "0.16"
+twox-hash = { version = "1.5", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3", features = ["processthreadsapi"] }
