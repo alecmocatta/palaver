@@ -39,8 +39,12 @@ pub fn move_fds(fds: &mut [(Fd, Fd)], flags: Option<FdFlag>, allow_nonexistent: 
 					break 'a i;
 				}
 			}
-			for &mut (from, to) in fds {
-				assert_eq!(from, to); // this assertion checks we aren't looping eternally due to a ring; TODO: use self::dup for temp fd
+			for &mut (ref mut from, to) in &mut *fds {
+				// break rings to avoid looping eternally
+				if *from != to {
+					*from = dup_fd(*from, None).unwrap();
+					continue 'a;
+				}
 			}
 			return;
 		};
