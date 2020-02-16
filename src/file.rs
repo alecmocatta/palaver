@@ -28,6 +28,14 @@ pub use fcntl::{FdFlag, OFlag};
 /// Maps file descriptors [(from,to)]
 #[cfg(unix)]
 pub fn move_fds(fds: &mut [(Fd, Fd)], flags: Option<FdFlag>, allow_nonexistent: bool) {
+	if let Some(flags) = flags {
+		for &(from, to) in fds.iter() {
+			if from == to {
+				let err = fcntl::fcntl(to, fcntl::FcntlArg::F_SETFD(flags)).unwrap();
+				assert_eq!(err, 0);
+			}
+		}
+	}
 	loop {
 		#[allow(clippy::never_loop)]
 		let i = 'a: loop {
@@ -42,7 +50,7 @@ pub fn move_fds(fds: &mut [(Fd, Fd)], flags: Option<FdFlag>, allow_nonexistent: 
 			for &mut (ref mut from, to) in &mut *fds {
 				// break rings to avoid looping eternally
 				if *from != to {
-					*from = dup_fd(*from, None).unwrap();
+					*from = dup_fd(*from, flags).unwrap();
 					continue 'a;
 				}
 			}
