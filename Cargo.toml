@@ -46,7 +46,7 @@ winapi = { version = "0.3", features = ["processthreadsapi"] }
 mach = "0.3"
 
 [target.'cfg(any(target_os = "android", target_os = "linux"))'.dependencies]
-procfs = { version = "0.7", default-features = false }
+procfs = { version = "0.8", default-features = false }
 
 [dev-dependencies]
 serde_json = "1.0"
