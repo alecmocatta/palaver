@@ -36,7 +36,7 @@ valgrind_request = { version = "1.1", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.47"
-nix = "0.16"
+nix = "0.19"
 twox-hash = { version = "1.5", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
