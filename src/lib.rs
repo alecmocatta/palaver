@@ -27,7 +27,9 @@
 	clippy::must_use_candidate,
 	clippy::same_functions_in_if_condition,
 	clippy::shadow_unrelated,
-	clippy::similar_names
+	clippy::similar_names,
+	clippy::wildcard_imports,
+	clippy::match_single_binding
 )]
 
 pub mod env;

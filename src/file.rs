@@ -317,7 +317,7 @@ pub fn fexecve(fd: Fd, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infallible
 		target_os = "solaris"
 	))]
 	{
-		res = res.or_else(|_| {
+		res = res.map_err(|_| {
 			let args: heapless::Vec<*const libc::c_char, heapless::consts::U256> = args
 				.iter()
 				.map(|arg| arg.as_ptr())
@@ -331,7 +331,7 @@ pub fn fexecve(fd: Fd, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infallible
 
 			let _ = unsafe { libc::fexecve(fd, args.as_ptr(), vars.as_ptr()) };
 
-			Err(nix::Error::Sys(nix::errno::Errno::last()))
+			nix::Error::Sys(nix::errno::Errno::last())
 		});
 	}
 	if res == Err(nix::Error::Sys(nix::errno::Errno::ENOSYS)) {
