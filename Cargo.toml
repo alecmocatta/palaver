@@ -28,7 +28,7 @@ all-features = true
 
 [dependencies]
 bitflags = "1.0"
-heapless = "0.5"
+heapless = "0.7"
 lazy_static = "1.0"
 replace_with = "0.1"
 typenum = "1.10"
