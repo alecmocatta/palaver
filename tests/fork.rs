@@ -3,13 +3,18 @@ mod fork {
 	use nix::{sys::signal, unistd::Pid, *};
 	use rand::{seq::SliceRandom, Rng};
 	use std::{
-		mem, process, sync::{
-			atomic::{AtomicBool, Ordering}, Arc
-		}, thread::{self, sleep}, time::Duration
+		mem, process,
+		sync::{
+			atomic::{AtomicBool, Ordering},
+			Arc,
+		},
+		thread::{self, sleep},
+		time::Duration,
 	};
 
 	use palaver::{
-		file::pipe, process::{fork, ForkResult}
+		file::pipe,
+		process::{fork, ForkResult},
 	};
 
 	#[global_allocator]
@@ -47,7 +52,7 @@ mod fork {
 			let err = fcntl::fcntl(read, fcntl::FcntlArg::F_SETFL(flags)).unwrap();
 			assert_eq!(err, 0);
 			let err = unistd::read(read, &mut [0]);
-			assert_eq!(err, Err(nix::Error::Sys(nix::errno::Errno::EAGAIN)));
+			assert_eq!(err, Err(nix::errno::Errno::EAGAIN));
 			flags &= !fcntl::OFlag::O_NONBLOCK;
 			let err = fcntl::fcntl(read, fcntl::FcntlArg::F_SETFL(flags)).unwrap();
 			assert_eq!(err, 0);
@@ -69,8 +74,8 @@ mod fork {
 		let allocator = thread::spawn(move || {
 			let mut rng = rand::thread_rng();
 			while !done1.load(Ordering::Relaxed) {
-				let a = (0..rng.gen_range(0, 1000u16)).collect::<Vec<_>>();
-				sleep(rng.gen_range(Duration::new(0, 0), Duration::from_millis(1)));
+				let a = (0..rng.gen_range(0..1000u16)).collect::<Vec<_>>();
+				sleep(Duration::from_millis(rng.gen_range(0..1)));
 				drop(a); // std::hint::black_box when it's stable
 			}
 		});
@@ -141,7 +146,8 @@ mod fork {
 				};
 
 				sleep(
-					rand::thread_rng().gen_range(Duration::new(0, 0), Duration::from_millis(500)),
+					rand::thread_rng()
+						.gen_range(Duration::from_millis(0)..Duration::from_millis(500)),
 				);
 				let signal = if rand::random() {
 					signal::SIGKILL
@@ -164,9 +170,12 @@ mod fork {
 	}
 
 	fn assert_dead<R>(f: impl FnOnce() -> R) -> R {
-		let tmpdir = (0..10)
-			.map(|_| rand::thread_rng().sample(rand::distributions::Alphanumeric))
-			.collect::<String>();
+		let tmpdir = String::from_utf8(
+			(0..10)
+				.map(|_| rand::thread_rng().sample(rand::distributions::Alphanumeric))
+				.collect::<Vec<_>>(),
+		)
+		.unwrap();
 		std::fs::create_dir(&tmpdir).unwrap();
 		std::env::set_current_dir(&tmpdir).unwrap();
 		let ret = f();
@@ -196,7 +205,11 @@ mod fork {
 
 	mod forbid_alloc {
 		use std::{
-			alloc::{GlobalAlloc, Layout}, cell::RefCell, fs::File, io::{self, Write}, os::unix::io::{FromRawFd, IntoRawFd}
+			alloc::{GlobalAlloc, Layout},
+			cell::RefCell,
+			fs::File,
+			io::{self, Write},
+			os::unix::io::{FromRawFd, IntoRawFd},
 		};
 
 		#[derive(Copy, Clone, PartialEq)]
