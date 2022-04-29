@@ -15,10 +15,17 @@ use nix::{errno, fcntl, sys::stat, unistd};
 use std::convert::TryInto;
 #[cfg(unix)]
 use std::{
-	convert::Infallible, ffi::{CStr, CString, OsString}, fs, iter, os::unix::ffi::OsStringExt, os::unix::io::AsRawFd, os::unix::io::FromRawFd
+	convert::Infallible,
+	ffi::{CStr, CString, OsString},
+	fs, iter,
+	os::unix::ffi::OsStringExt,
+	os::unix::io::AsRawFd,
+	os::unix::io::FromRawFd,
 };
 use std::{
-	fmt, io::{self, Read, Write}, path
+	fmt,
+	io::{self, Read, Write},
+	path,
 };
 
 #[doc(inline)]
@@ -100,7 +107,7 @@ pub fn copy_fd(
 		let _ = fcntl::fcntl(newfd, fcntl::FcntlArg::F_GETFD).unwrap();
 	}
 	if oldfd == newfd {
-		return Err(nix::Error::Sys(errno::Errno::EINVAL));
+		return Err(errno::Errno::EINVAL);
 	}
 	let flags = flags.unwrap_or_else(|| {
 		FdFlag::from_bits(fcntl::fcntl(oldfd, fcntl::FcntlArg::F_GETFD).unwrap()).unwrap()
@@ -117,7 +124,7 @@ pub fn copy_fd(
 	loop {
 		match unistd::dup3(oldfd, newfd, flags) {
 			#[cfg(any(target_os = "android", target_os = "linux"))]
-			Err(nix::Error::Sys(errno::Errno::EBUSY)) => continue, // only occurs on Linux
+			Err(errno::Errno::EBUSY) => continue, // only occurs on Linux
 			a => break a,
 		}
 	}
@@ -200,7 +207,7 @@ pub fn memfd_create(name: &CStr, cloexec: bool) -> nix::Result<Fd> {
 		#[cfg(not(any(target_os = "android", target_os = "linux", target_os = "freebsd")))]
 		{
 			let _ = name;
-			Err(nix::Error::Sys(errno::Errno::ENOSYS))
+			Err(errno::Errno::ENOSYS)
 		}
 	};
 	#[cfg(all(unix, not(any(target_os = "ios", target_os = "macos"))))] // can't read/write on mac
@@ -271,7 +278,7 @@ pub fn execve(path: &CStr, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infall
 
 	let _ = unsafe { libc::execve(path.as_ptr(), args.as_ptr(), vars.as_ptr()) };
 
-	Err(nix::Error::Sys(nix::errno::Errno::last()))
+	Err(nix::errno::Errno::last())
 }
 
 #[cfg(unix)]
@@ -307,7 +314,7 @@ fn tmpfile(
 /// Falls back to execve("/proc/self/fd/{fd}",...), falls back to execve("/tmp/{hash}")
 #[cfg(unix)]
 pub fn fexecve(fd: Fd, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infallible> {
-	let mut res = Err(nix::Error::Sys(nix::errno::Errno::ENOSYS));
+	let mut res = Err(nix::errno::Errno::ENOSYS);
 	#[cfg(any(
 		target_os = "android",
 		target_os = "freebsd",
@@ -331,18 +338,18 @@ pub fn fexecve(fd: Fd, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infallible
 
 			let _ = unsafe { libc::fexecve(fd, args.as_ptr(), vars.as_ptr()) };
 
-			nix::Error::Sys(nix::errno::Errno::last())
+			nix::errno::Errno::last()
 		});
 	}
-	if res == Err(nix::Error::Sys(nix::errno::Errno::ENOSYS)) {
+	if res == Err(nix::errno::Errno::ENOSYS) {
 		let mut path = fd_path_heapless(fd).unwrap();
 		let path = heapless_string_to_cstr(&mut path);
 		res = execve(&path, args, vars);
 		if res.is_err() {
-			res = Err(nix::Error::Sys(nix::errno::Errno::ENOSYS));
+			res = Err(nix::errno::Errno::ENOSYS);
 		}
 	}
-	if res == Err(nix::Error::Sys(nix::errno::Errno::ENOSYS)) {
+	if res == Err(nix::errno::Errno::ENOSYS) {
 		res = fexecve_fallback(fd, args, vars);
 	}
 	res
@@ -491,7 +498,7 @@ pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> nix:
 			let n: u64 = n.try_into().unwrap();
 			assert!(n <= len - offset);
 			if n == 0 {
-				return Err(nix::Error::Sys(nix::errno::Errno::EIO));
+				return Err(nix::errno::Errno::EIO);
 			}
 			offset += n;
 		}
@@ -514,7 +521,7 @@ pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> nix:
 			let n: u64 = n.try_into().unwrap();
 			assert!(n <= len - offset);
 			if n == 0 {
-				return Err(nix::Error::Sys(nix::errno::Errno::EIO));
+				return Err(nix::errno::Errno::EIO);
 			}
 			offset += n;
 		}
@@ -539,7 +546,7 @@ pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> nix:
 			let n: u64 = n.try_into().unwrap();
 			assert!(n <= len - offset);
 			if n == 0 {
-				return Err(nix::Error::Sys(nix::errno::Errno::EIO));
+				return Err(nix::errno::Errno::EIO);
 			}
 			offset += n;
 		}
@@ -576,7 +583,7 @@ pub fn copy_splice<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> nix::R
 		let n: u64 = n.try_into().unwrap();
 		assert!(n <= len - offset);
 		if n == 0 {
-			return Err(nix::Error::Sys(nix::errno::Errno::EIO));
+			return Err(nix::errno::Errno::EIO);
 		}
 		offset += n;
 	}

@@ -111,7 +111,7 @@ impl ChildHandle {
 					assert_eq!(pid_, pid);
 					break Ok(WaitStatus::Signaled(signal, dumped));
 				}
-				Ok(_) | Err(Error::Sys(Errno::EINTR)) => (),
+				Ok(_) | Err(Errno::EINTR) => (),
 				Err(err) => break Err(err),
 			}
 		}
@@ -139,7 +139,7 @@ impl ChildHandle {
 			.as_ref()
 			.expect(".signal() can only be called on non-orphaned children");
 		if owns.state.load(Ordering::Relaxed) != 0 {
-			return Err(Error::Sys(Errno::ESRCH));
+			return Err(Errno::ESRCH);
 		}
 		signal::kill(self.pid, signal)?;
 		if signal == Some(signal::SIGKILL) {
@@ -249,7 +249,7 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 					owns: None,
 				}))
 			} else {
-				Err(Error::Sys(Errno::UnknownErrno))
+				Err(Errno::UnknownErrno)
 			}
 		})();
 		if new.handler() != old.handler() {
