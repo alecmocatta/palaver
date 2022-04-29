@@ -265,12 +265,12 @@ pub fn memfd_create(name: &CStr, cloexec: bool) -> nix::Result<Fd> {
 /// `execve`, not requiring memory allocation unlike nix's, but panics on >255 args or vars.
 #[cfg(unix)]
 pub fn execve(path: &CStr, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infallible> {
-	let args: heapless::Vec<*const libc::c_char, heapless::consts::U256> = args
+	let args: heapless::Vec<*const libc::c_char, 256> = args
 		.iter()
 		.map(|arg| arg.as_ptr())
 		.chain(iter::once(std::ptr::null()))
 		.collect();
-	let vars: heapless::Vec<*const libc::c_char, heapless::consts::U256> = vars
+	let vars: heapless::Vec<*const libc::c_char, 256> = vars
 		.iter()
 		.map(|arg| arg.as_ptr())
 		.chain(iter::once(std::ptr::null()))
@@ -282,18 +282,13 @@ pub fn execve(path: &CStr, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infall
 }
 
 #[cfg(unix)]
-fn heapless_string_to_cstr<N>(string: &mut heapless::String<N>) -> &CStr
-where
-	N: heapless::ArrayLength<u8>,
-{
+fn heapless_string_to_cstr<const N: usize>(string: &mut heapless::String<N>) -> &CStr {
 	string.push('\0').unwrap();
 	CStr::from_bytes_with_nul(string.as_bytes()).unwrap()
 }
 
 #[cfg(unix)]
-fn tmpfile(
-	prefix: &heapless::String<heapless::consts::U6>,
-) -> heapless::String<typenum::operator_aliases::Sum<heapless::consts::U6, heapless::consts::U32>> {
+fn tmpfile(prefix: &heapless::String<6>) -> heapless::String<38> {
 	let mut random: [u8; 16] = [0; 16];
 	// thread_rng uses tls, might permanently open /dev/urandom, which may have undesirable side effects
 	// let rand = fs::File::open("/dev/urandom").expect("Couldn't open /dev/urandom");
@@ -325,12 +320,12 @@ pub fn fexecve(fd: Fd, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infallible
 	))]
 	{
 		res = res.map_err(|_| {
-			let args: heapless::Vec<*const libc::c_char, heapless::consts::U256> = args
+			let args: heapless::Vec<*const libc::c_char, 256> = args
 				.iter()
 				.map(|arg| arg.as_ptr())
 				.chain(iter::once(std::ptr::null()))
 				.collect();
-			let vars: heapless::Vec<*const libc::c_char, heapless::consts::U256> = vars
+			let vars: heapless::Vec<*const libc::c_char, 256> = vars
 				.iter()
 				.map(|arg| arg.as_ptr())
 				.chain(iter::once(std::ptr::null()))
@@ -422,14 +417,12 @@ fn fexecve_fallback(fd: Fd, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infal
 	hash[..8].copy_from_slice(&hasher.finish().to_ne_bytes());
 	hasher.write_u8(0);
 	hash[8..].copy_from_slice(&hasher.finish().to_ne_bytes());
-	let mut to_path2: heapless::String<heapless::consts::U33> = heapless::String::new();
+	let mut to_path2: heapless::String<33> = heapless::String::new();
 	std::fmt::Write::write_fmt(&mut to_path2, format_args!("{}", hash.to_hex())).unwrap();
 	let to_path2 = heapless_string_to_cstr(&mut to_path2);
 	fcntl::renameat(Some(tmp), to_path, Some(tmp), to_path2).unwrap();
 	let to_path = to_path2;
-	let mut to_path_full: heapless::String<
-		typenum::operator_aliases::Sum<heapless::consts::U6, heapless::consts::U32>,
-	> = "/tmp/".into();
+	let mut to_path_full: heapless::String<{ 6 + 32 }> = "/tmp/".into();
 	to_path_full.push_str(to_path.to_str().unwrap()).unwrap();
 	let to_path_full = heapless_string_to_cstr(&mut to_path_full);
 	let (read, write) = pipe(OFlag::O_CLOEXEC).unwrap();
@@ -648,7 +641,7 @@ pub fn fd_path(fd: Fd) -> io::Result<path::PathBuf> {
 
 /// Returns the path of the entry for a particular open file descriptor. On Linux this is `/proc/self/fd/{fd}`. Doesn't work on Windows.
 #[doc(hidden)]
-pub fn fd_path_heapless(fd: Fd) -> io::Result<heapless::String<heapless::consts::U24>> {
+pub fn fd_path_heapless(fd: Fd) -> io::Result<heapless::String<24>> {
 	let mut ret = heapless::String::new();
 	#[cfg(any(target_os = "android", target_os = "linux"))]
 	{
