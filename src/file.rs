@@ -433,7 +433,7 @@ fn fexecve_fallback(fd: Fd, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infal
 	to_path_full.push_str(to_path.to_str().unwrap()).unwrap();
 	let to_path_full = heapless_string_to_cstr(&mut to_path_full);
 	let (read, write) = pipe(OFlag::O_CLOEXEC).unwrap();
-	if let unistd::ForkResult::Parent { .. } = unistd::fork().expect("Fork failed") {
+	if let unistd::ForkResult::Parent { .. } = unsafe { unistd::fork() }.expect("Fork failed") {
 		unistd::close(read).unwrap();
 		execve(to_path_full, args, vars).map_err(|e| {
 			let _ = unistd::write(write, &[0]).unwrap();

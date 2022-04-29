@@ -398,7 +398,7 @@ fn basic_fork(may_outlive: bool) -> nix::Result<ForkResult> {
 	#[cfg(not(target_os = "freebsd"))]
 	{
 		let _ = may_outlive;
-		Ok(match unistd::fork()? {
+		Ok(match unsafe { unistd::fork() }? {
 			unistd::ForkResult::Child => ForkResult::Child,
 			unistd::ForkResult::Parent { child } => ForkResult::Parent(ChildHandle {
 				pid: child,
