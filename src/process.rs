@@ -143,7 +143,9 @@ impl ChildHandle {
 		}
 		signal::kill(self.pid, signal)?;
 		if signal == Some(signal::SIGKILL) {
-			let _ = owns.state.compare_and_swap(0, 1, Ordering::Relaxed);
+			let _ = owns
+				.state
+				.compare_exchange(0, 1, Ordering::Relaxed, Ordering::Relaxed);
 		}
 		Ok(())
 	}
