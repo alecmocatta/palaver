@@ -15,17 +15,10 @@ use nix::{errno, fcntl, sys::stat, unistd};
 use std::convert::TryInto;
 #[cfg(unix)]
 use std::{
-	convert::Infallible,
-	ffi::{CStr, CString, OsString},
-	fs, iter,
-	os::unix::ffi::OsStringExt,
-	os::unix::io::AsRawFd,
-	os::unix::io::FromRawFd,
+	convert::Infallible, ffi::{CStr, CString, OsString}, fs, iter, os::unix::ffi::OsStringExt, os::unix::io::AsRawFd, os::unix::io::FromRawFd
 };
 use std::{
-	fmt,
-	io::{self, Read, Write},
-	path,
+	fmt, io::{self, Read, Write}, path
 };
 
 #[doc(inline)]
