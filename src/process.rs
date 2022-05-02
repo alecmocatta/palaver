@@ -2,7 +2,7 @@
 
 #[cfg(unix)]
 use nix::{
-	errno::Errno, fcntl, libc, sys::{signal, wait}, unistd::{self, Pid}, Error
+	errno::Errno, fcntl, libc, sys::{signal, wait}, unistd::{self, Pid}
 };
 use std::process::Command;
 #[cfg(unix)]
