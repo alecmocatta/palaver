@@ -29,10 +29,7 @@
 //! }
 //! ```
 
-#![allow(
-	clippy::type_complexity,
-	clippy::option_option,
-)]
+#![allow(clippy::type_complexity, clippy::option_option)]
 
 #[cfg(unix)]
 use libc::c_char;

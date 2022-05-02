@@ -100,7 +100,7 @@ pub fn copy_fd(
 		let _ = fcntl::fcntl(newfd, fcntl::FcntlArg::F_GETFD).unwrap();
 	}
 	if oldfd == newfd {
-		return Err(nix::Error::Sys(errno::Errno::EINVAL));
+		return Err(errno::Errno::EINVAL);
 	}
 	let flags = flags.unwrap_or_else(|| {
 		FdFlag::from_bits(fcntl::fcntl(oldfd, fcntl::FcntlArg::F_GETFD).unwrap()).unwrap()
@@ -117,7 +117,7 @@ pub fn copy_fd(
 	loop {
 		match unistd::dup3(oldfd, newfd, flags) {
 			#[cfg(any(target_os = "android", target_os = "linux"))]
-			Err(nix::Error::Sys(errno::Errno::EBUSY)) => continue, // only occurs on Linux
+			Err(errno::Errno::EBUSY) => continue, // only occurs on Linux
 			a => break a,
 		}
 	}
@@ -200,7 +200,7 @@ pub fn memfd_create(name: &CStr, cloexec: bool) -> nix::Result<Fd> {
 		#[cfg(not(any(target_os = "android", target_os = "linux", target_os = "freebsd")))]
 		{
 			let _ = name;
-			Err(nix::Error::Sys(errno::Errno::ENOSYS))
+			Err(errno::Errno::ENOSYS)
 		}
 	};
 	#[cfg(all(unix, not(any(target_os = "ios", target_os = "macos"))))] // can't read/write on mac
@@ -258,12 +258,12 @@ pub fn memfd_create(name: &CStr, cloexec: bool) -> nix::Result<Fd> {
 /// `execve`, not requiring memory allocation unlike nix's, but panics on >255 args or vars.
 #[cfg(unix)]
 pub fn execve(path: &CStr, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infallible> {
-	let args: heapless::Vec<*const libc::c_char, heapless::consts::U256> = args
+	let args: heapless::Vec<*const libc::c_char, 256> = args
 		.iter()
 		.map(|arg| arg.as_ptr())
 		.chain(iter::once(std::ptr::null()))
 		.collect();
-	let vars: heapless::Vec<*const libc::c_char, heapless::consts::U256> = vars
+	let vars: heapless::Vec<*const libc::c_char, 256> = vars
 		.iter()
 		.map(|arg| arg.as_ptr())
 		.chain(iter::once(std::ptr::null()))
@@ -271,22 +271,17 @@ pub fn execve(path: &CStr, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infall
 
 	let _ = unsafe { libc::execve(path.as_ptr(), args.as_ptr(), vars.as_ptr()) };
 
-	Err(nix::Error::Sys(nix::errno::Errno::last()))
+	Err(nix::errno::Errno::last())
 }
 
 #[cfg(unix)]
-fn heapless_string_to_cstr<N>(string: &mut heapless::String<N>) -> &CStr
-where
-	N: heapless::ArrayLength<u8>,
-{
+fn heapless_string_to_cstr<const N: usize>(string: &mut heapless::String<N>) -> &CStr {
 	string.push('\0').unwrap();
 	CStr::from_bytes_with_nul(string.as_bytes()).unwrap()
 }
 
 #[cfg(unix)]
-fn tmpfile(
-	prefix: &heapless::String<heapless::consts::U6>,
-) -> heapless::String<typenum::operator_aliases::Sum<heapless::consts::U6, heapless::consts::U32>> {
+fn tmpfile(prefix: &heapless::String<6>) -> heapless::String<38> {
 	let mut random: [u8; 16] = [0; 16];
 	// thread_rng uses tls, might permanently open /dev/urandom, which may have undesirable side effects
 	// let rand = fs::File::open("/dev/urandom").expect("Couldn't open /dev/urandom");
@@ -307,7 +302,7 @@ fn tmpfile(
 /// Falls back to execve("/proc/self/fd/{fd}",...), falls back to execve("/tmp/{hash}")
 #[cfg(unix)]
 pub fn fexecve(fd: Fd, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infallible> {
-	let mut res = Err(nix::Error::Sys(nix::errno::Errno::ENOSYS));
+	let mut res = Err(nix::errno::Errno::ENOSYS);
 	#[cfg(any(
 		target_os = "android",
 		target_os = "freebsd",
@@ -318,12 +313,12 @@ pub fn fexecve(fd: Fd, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infallible
 	))]
 	{
 		res = res.map_err(|_| {
-			let args: heapless::Vec<*const libc::c_char, heapless::consts::U256> = args
+			let args: heapless::Vec<*const libc::c_char, 256> = args
 				.iter()
 				.map(|arg| arg.as_ptr())
 				.chain(iter::once(std::ptr::null()))
 				.collect();
-			let vars: heapless::Vec<*const libc::c_char, heapless::consts::U256> = vars
+			let vars: heapless::Vec<*const libc::c_char, 256> = vars
 				.iter()
 				.map(|arg| arg.as_ptr())
 				.chain(iter::once(std::ptr::null()))
@@ -331,18 +326,18 @@ pub fn fexecve(fd: Fd, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infallible
 
 			let _ = unsafe { libc::fexecve(fd, args.as_ptr(), vars.as_ptr()) };
 
-			nix::Error::Sys(nix::errno::Errno::last())
+			nix::errno::Errno::last()
 		});
 	}
-	if res == Err(nix::Error::Sys(nix::errno::Errno::ENOSYS)) {
+	if res == Err(nix::errno::Errno::ENOSYS) {
 		let mut path = fd_path_heapless(fd).unwrap();
 		let path = heapless_string_to_cstr(&mut path);
 		res = execve(&path, args, vars);
 		if res.is_err() {
-			res = Err(nix::Error::Sys(nix::errno::Errno::ENOSYS));
+			res = Err(nix::errno::Errno::ENOSYS);
 		}
 	}
-	if res == Err(nix::Error::Sys(nix::errno::Errno::ENOSYS)) {
+	if res == Err(nix::errno::Errno::ENOSYS) {
 		res = fexecve_fallback(fd, args, vars);
 	}
 	res
@@ -415,18 +410,16 @@ fn fexecve_fallback(fd: Fd, args: &[&CStr], vars: &[&CStr]) -> nix::Result<Infal
 	hash[..8].copy_from_slice(&hasher.finish().to_ne_bytes());
 	hasher.write_u8(0);
 	hash[8..].copy_from_slice(&hasher.finish().to_ne_bytes());
-	let mut to_path2: heapless::String<heapless::consts::U33> = heapless::String::new();
+	let mut to_path2: heapless::String<33> = heapless::String::new();
 	std::fmt::Write::write_fmt(&mut to_path2, format_args!("{}", hash.to_hex())).unwrap();
 	let to_path2 = heapless_string_to_cstr(&mut to_path2);
 	fcntl::renameat(Some(tmp), to_path, Some(tmp), to_path2).unwrap();
 	let to_path = to_path2;
-	let mut to_path_full: heapless::String<
-		typenum::operator_aliases::Sum<heapless::consts::U6, heapless::consts::U32>,
-	> = "/tmp/".into();
+	let mut to_path_full: heapless::String<{ 6 + 32 }> = "/tmp/".into();
 	to_path_full.push_str(to_path.to_str().unwrap()).unwrap();
 	let to_path_full = heapless_string_to_cstr(&mut to_path_full);
 	let (read, write) = pipe(OFlag::O_CLOEXEC).unwrap();
-	if let unistd::ForkResult::Parent { .. } = unistd::fork().expect("Fork failed") {
+	if let unistd::ForkResult::Parent { .. } = unsafe { unistd::fork() }.expect("Fork failed") {
 		unistd::close(read).unwrap();
 		execve(to_path_full, args, vars).map_err(|e| {
 			let _ = unistd::write(write, &[0]).unwrap();
@@ -491,7 +484,7 @@ pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> nix:
 			let n: u64 = n.try_into().unwrap();
 			assert!(n <= len - offset);
 			if n == 0 {
-				return Err(nix::Error::Sys(nix::errno::Errno::EIO));
+				return Err(nix::errno::Errno::EIO);
 			}
 			offset += n;
 		}
@@ -514,7 +507,7 @@ pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> nix:
 			let n: u64 = n.try_into().unwrap();
 			assert!(n <= len - offset);
 			if n == 0 {
-				return Err(nix::Error::Sys(nix::errno::Errno::EIO));
+				return Err(nix::errno::Errno::EIO);
 			}
 			offset += n;
 		}
@@ -539,7 +532,7 @@ pub fn copy_sendfile<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> nix:
 			let n: u64 = n.try_into().unwrap();
 			assert!(n <= len - offset);
 			if n == 0 {
-				return Err(nix::Error::Sys(nix::errno::Errno::EIO));
+				return Err(nix::errno::Errno::EIO);
 			}
 			offset += n;
 		}
@@ -576,7 +569,7 @@ pub fn copy_splice<O: AsRawFd, I: AsRawFd>(in_: &I, out: &O, len: u64) -> nix::R
 		let n: u64 = n.try_into().unwrap();
 		assert!(n <= len - offset);
 		if n == 0 {
-			return Err(nix::Error::Sys(nix::errno::Errno::EIO));
+			return Err(nix::errno::Errno::EIO);
 		}
 		offset += n;
 	}
@@ -641,7 +634,7 @@ pub fn fd_path(fd: Fd) -> io::Result<path::PathBuf> {
 
 /// Returns the path of the entry for a particular open file descriptor. On Linux this is `/proc/self/fd/{fd}`. Doesn't work on Windows.
 #[doc(hidden)]
-pub fn fd_path_heapless(fd: Fd) -> io::Result<heapless::String<heapless::consts::U24>> {
+pub fn fd_path_heapless(fd: Fd) -> io::Result<heapless::String<24>> {
 	let mut ret = heapless::String::new();
 	#[cfg(any(target_os = "android", target_os = "linux"))]
 	{

@@ -2,7 +2,7 @@
 
 #[cfg(unix)]
 use nix::{
-	errno::Errno, fcntl, libc, sys::{signal, wait}, unistd::{self, Pid}, Error
+	errno::Errno, fcntl, libc, sys::{signal, wait}, unistd::{self, Pid}
 };
 use std::process::Command;
 #[cfg(unix)]
@@ -111,7 +111,7 @@ impl ChildHandle {
 					assert_eq!(pid_, pid);
 					break Ok(WaitStatus::Signaled(signal, dumped));
 				}
-				Ok(_) | Err(Error::Sys(Errno::EINTR)) => (),
+				Ok(_) | Err(Errno::EINTR) => (),
 				Err(err) => break Err(err),
 			}
 		}
@@ -139,11 +139,13 @@ impl ChildHandle {
 			.as_ref()
 			.expect(".signal() can only be called on non-orphaned children");
 		if owns.state.load(Ordering::Relaxed) != 0 {
-			return Err(Error::Sys(Errno::ESRCH));
+			return Err(Errno::ESRCH);
 		}
 		signal::kill(self.pid, signal)?;
 		if signal == Some(signal::SIGKILL) {
-			let _ = owns.state.compare_and_swap(0, 1, Ordering::Relaxed);
+			let _ = owns
+				.state
+				.compare_exchange(0, 1, Ordering::Relaxed, Ordering::Relaxed);
 		}
 		Ok(())
 	}
@@ -249,7 +251,7 @@ pub fn fork(orphan: bool) -> nix::Result<ForkResult> {
 					owns: None,
 				}))
 			} else {
-				Err(Error::Sys(Errno::UnknownErrno))
+				Err(Errno::UnknownErrno)
 			}
 		})();
 		if new.handler() != old.handler() {
@@ -398,7 +400,7 @@ fn basic_fork(may_outlive: bool) -> nix::Result<ForkResult> {
 	#[cfg(not(target_os = "freebsd"))]
 	{
 		let _ = may_outlive;
-		Ok(match unistd::fork()? {
+		Ok(match unsafe { unistd::fork() }? {
 			unistd::ForkResult::Child => ForkResult::Child,
 			unistd::ForkResult::Parent { child } => ForkResult::Parent(ChildHandle {
 				pid: child,
