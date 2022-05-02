@@ -3,18 +3,13 @@ mod fork {
 	use nix::{sys::signal, unistd::Pid, *};
 	use rand::{seq::SliceRandom, Rng};
 	use std::{
-		mem, process,
-		sync::{
-			atomic::{AtomicBool, Ordering},
-			Arc,
-		},
-		thread::{self, sleep},
-		time::Duration,
+		mem, process, sync::{
+			atomic::{AtomicBool, Ordering}, Arc
+		}, thread::{self, sleep}, time::Duration
 	};
 
 	use palaver::{
-		file::pipe,
-		process::{fork, ForkResult},
+		file::pipe, process::{fork, ForkResult}
 	};
 
 	#[global_allocator]
@@ -205,11 +200,7 @@ mod fork {
 
 	mod forbid_alloc {
 		use std::{
-			alloc::{GlobalAlloc, Layout},
-			cell::RefCell,
-			fs::File,
-			io::{self, Write},
-			os::unix::io::{FromRawFd, IntoRawFd},
+			alloc::{GlobalAlloc, Layout}, cell::RefCell, fs::File, io::{self, Write}, os::unix::io::{FromRawFd, IntoRawFd}
 		};
 
 		#[derive(Copy, Clone, PartialEq)]
